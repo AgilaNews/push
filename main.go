@@ -2,14 +2,20 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/mattn/go-xmpp"
 	"fmt"
+	"github.com/mattn/go-xmpp"
 	"log"
 	"time"
 )
 
-type DownstreamData struct {
-	Body string `json:"body"`
+type GCMDownstreamData struct {
+	Type   string `json:"type"`
+	PushId string `json:"push_id"`
+	Tpl    string `json:"tpl"`
+	Title  string `json:"title"`
+	Digest string `json:"digest"`
+	Img    string `json:"img"`
+	NewsId string `json:"news_id"`
 }
 
 type GCMDownstream struct {
@@ -19,14 +25,15 @@ type GCMDownstream struct {
 	//CollapseKey string `json:"collapse_key,omitempty"`
 	//Priority string `json:"priority,omitempty"`
 	//ContentAvaliable bool `json:"content_avaliable,omitempty"`
-	Notification DownstreamData `json:"notification"`
+	//	Notification DownstreamData `json:"notification"`
+	Data GCMDownstreamData `json:"data"`
 }
 
 func main() {
 	options := xmpp.Options{
 		Host:     "fcm-xmpp.googleapis.com:5235",
-		User:     "936821311909@gcm.googleapis.com",
-		Password: "AIzaSyAj_3nEtK9bhdIoNTCXliFrc26zGO5GsPg",
+		User:     "1066815885426@gcm.googleapis.com",
+		Password: "AIzaSyBMK2JittPIQI489utC3QVIOE-VSa4djwk",
 		NoTLS:    false,
 		Debug:    true,
 	}
@@ -57,11 +64,16 @@ func main() {
 	}()
 
 	downstream := GCMDownstream{
-		To: "/topics/news",
-		//		Condition: "news in topics",
+		To:        "/topics/notification",
 		Messageid: "123",
-		Notification: DownstreamData{
-			Body: "Hello World",
+		Data: GCMDownstreamData{
+			Type:   "1",
+			PushId: "123",
+			Tpl:    "2",
+			Title:  "animal zhan",
+			Digest: "lianzhan is animal",
+			Img:    "http://img.agilanews.info/image/SohE2st5Dag=.jpg?p=t=180x180|q=45",
+			NewsId: "VRGFHuVr9y0=",
 		},
 	}
 
