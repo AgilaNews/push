@@ -103,6 +103,7 @@ func getNewsDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+    fmt.Printf("starts")
 	var err error
 	if err = env.Init(); err != nil {
 		fmt.Printf("init error: %v\n", err)
