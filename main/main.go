@@ -45,6 +45,7 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 	notification.Options = fcm.NewNotificationDefaultOptions()
 	go func() {
 		devices, err := env.DeviceMapper.GetAllDevice()
+		env.Logger.Info("[SNDALL][%v]", len(devices))
 		if err == nil {
 			for _, device := range devices {
 				appServer.PushNotificationToDevice(device, notification)
@@ -57,6 +58,7 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 }
 
 func broadcast(w http.ResponseWriter, r *http.Request) {
+	env.Logger.Info("[BROADCAST]")
 	notification := &fcm.Notification{}
 
 	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
@@ -84,6 +86,7 @@ func broadcast(w http.ResponseWriter, r *http.Request) {
 }
 
 func reset(w http.ResponseWriter, r *http.Request) {
+	env.Logger.Info("[RESET]")
 	go func() {
 		appServer.BroadcastReset(BROADCASE_TOPIC)
 	}()
@@ -120,6 +123,7 @@ func sendToDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		go func() {
+			env.Logger.Info("[SINGLECAST][%v]", device.DeviceId)
 			appServer.PushNotificationToDevice(device, &req.Notification)
 		}()
 	}
