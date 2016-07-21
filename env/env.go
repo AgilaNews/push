@@ -20,9 +20,9 @@ type Configuration struct {
 		SenderId    string `json:"sender_id"`
 		SecurityKey string `json:"security_key"`
 	} `json:"app_server"`
-    HttpServer struct {
-        Addr string `json:"addr"`
-    } `json:"http_server"`
+	HttpServer struct {
+		Addr string `json:"addr"`
+	} `json:"http_server"`
 }
 
 var (
@@ -50,7 +50,9 @@ func Init() error {
 	Logger.AddFilter("log", log4go.FINE, log4go.NewFileLogWriter(Config.Log.Path, true))
 
 	if DeviceMapper, err = devicemapper.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
+		Logger.Info("init device mapper fail")
 		return err
 	}
+	Logger.Info("env init success")
 	return nil
 }
