@@ -2,7 +2,7 @@
     "log": {
         "path": "/data/logs/fcm_app_server/fcm_app_server.log",
         "level": "INFO",
-        "console": true
+        "console": false
     },
     "redis": {
         "addr": "10.8.2.29:6379"
