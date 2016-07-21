@@ -1,36 +1,115 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fcm/env"
 	"fcm/fcm"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 )
 
 const (
-	SENDER_ID       = "759516127227"
-	SECURITY_KEY    = "AIzaSyDVISzLzFTG8qgasug3BM_cDgw-mtkj0u0"
 	BROADCASE_TOPIC = "com.upeninsula.banews"
-	HTTP_BIND       = ":8070"
 )
 
-func ListClients(w http.ResponseWriter, r *http.Request) {
+var (
+	appServer *fcm.AppServer
+)
+
+func listClients(w http.ResponseWriter, r *http.Request) {
 	devices, _ := env.DeviceMapper.GetAllDevice()
 
 	json.NewEncoder(w).Encode(devices)
 }
 
+func home(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func sendall(w http.ResponseWriter, r *http.Request) {
+	notification := &fcm.Notification{}
+
+	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("%v", err),
+		})
+		return
+	}
+
+	if notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "only support tpl 2",
+		})
+		return
+	}
+
+	notification.Options = fcm.NewNotificationDefaultOptions()
+	go func() {
+		devices, err := env.DeviceMapper.GetAllDevice()
+		if err == nil {
+			for _, device := range devices {
+				appServer.PushNotificationToDevice(device, notification)
+			}
+		}
+	}()
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "ok",
+	})
+}
+
+func broadcast(w http.ResponseWriter, r *http.Request) {
+	notification := &fcm.Notification{}
+
+	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("%v", err),
+		})
+		return
+	}
+
+	if notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "only support tpl 2",
+		})
+		return
+	}
+
+	notification.Options = fcm.NewNotificationDefaultOptions()
+	go func() {
+		appServer.BroadcastNotificationToTopic(BROADCASE_TOPIC, notification)
+	}()
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "ok",
+	})
+}
+
+func reset(w http.ResponseWriter, r *http.Request) {
+	go func() {
+		appServer.BroadcastReset(BROADCASE_TOPIC)
+	}()
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "ok",
+	})
+}
+
+func sendToDevices(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func getNewsDetail(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func main() {
-	if err := env.Init(); err != nil {
+	var err error
+	if err = env.Init(); err != nil {
 		fmt.Printf("init error: %v\n", err)
 		os.Exit(-1)
 	}
 
-	appServer, err := fcm.NewAppServer(SENDER_ID, SECURITY_KEY)
+	appServer, err = fcm.NewAppServer(env.Config.AppServer.SenderId, env.Config.AppServer.SecurityKey)
 	if err != nil {
 		env.Logger.Error("init app server error")
 		os.Exit(-1)
@@ -38,42 +117,15 @@ func main() {
 		go appServer.Work()
 	}
 
-	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		for true {
-			text, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Println("exit")
-				os.Exit(-1)
-			}
+	http.HandleFunc("/clients", listClients)
+	http.HandleFunc("/", home)
+	http.HandleFunc("/broadcast", broadcast)
+	http.HandleFunc("/send_all_device", sendall)
+	http.HandleFunc("/reset", reset)
+	http.HandleFunc("/send_to_deviceid", sendToDevices)
+	http.HandleFunc("/news", getNewsDetail)
 
-			switch strings.TrimSpace(text) {
-			case "broadcast":
-				appServer.BroadcastNotificationToTopic(BROADCASE_TOPIC)
-			case "sendall":
-				notification := &fcm.Notification{
-					Tpl:     fcm.TPL_IMAGE_WITH_TEXT,
-					NewsId:  "4uVadtC/INM=",
-					Title:   "e-Man and the Masters of the",
-					Digest:  "Lian zhan is animal",
-					Image:   "http://img.agilanews.info/image/MvMnVzjhMXU%3D.jpg?t=135x135",
-					Options: fcm.NewNotificationDefaultOptions(),
-				}
-				devices, err := env.DeviceMapper.GetAllDevice()
-				if err == nil {
-					for _, device := range devices {
-						appServer.PushNotificationToDevice(device, notification)
-					}
-				}
-			default:
-				fmt.Println("fuck you")
-			}
-		}
-	}()
-
-	http.HandleFunc("/clients", ListClients)
-
-	if err := http.ListenAndServe(HTTP_BIND, nil); err != nil {
+	if err = http.ListenAndServe(env.Config.HttpServer.Addr, nil); err != nil {
 		env.Logger.Error("listen on http server error")
 	}
 }

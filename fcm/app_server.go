@@ -3,11 +3,9 @@ package fcm
 import (
 	"fcm/devicemapper"
 	"fcm/env"
-	"fmt"
 	"fcm/gcm"
+	"fmt"
 	"github.com/satori/go.uuid"
-	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -36,11 +34,12 @@ type AppServer struct {
 }
 
 type Notification struct {
-	Tpl     string
-	NewsId  string
-	Title   string
-	Digest  string
-	Image   string
+	Tpl     string `json:"tpl"`
+	NewsId  string `json:"news_id"`
+	Title   string `json:"title"`
+	Digest  string `json:"digest,omitempty"`
+	Image   string `json:"image"`
+	PushId  int    `json:"push_id"`
 	Options *NotificationOptions
 }
 
@@ -68,7 +67,9 @@ func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 }
 
 func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
-	env.Logger.Debug("OnReceipt from %v", msg.From)
+	if msg.Data["message_status"] == "MESSAGE_SENT_TO_DEVICE" {
+		env.Logger.Debug("OnReceipt from %v at %v", msg.Data["device_registration_id"], msg.Data["message_sent_timestamp"])
+	}
 }
 
 func (appServer *AppServer) onSendError(msg *gcm.CcsMessage) {
@@ -211,10 +212,10 @@ func (appServer *AppServer) PushNotificationToDevice(dev *devicemapper.Device, n
 	return nil
 }
 
-func (appServer *AppServer) BroadcastNotificationToTopic(topic string) error {
+func (appServer *AppServer) BroadcastReset(topic string) error {
 	msg_id := genMessageId()
-
 	msg := &gcm.XmppMessage{
+		To:             fmt.Sprintf("/topics/%s", topic),
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
 		DelayWhileIdle: false,
@@ -224,6 +225,17 @@ func (appServer *AppServer) BroadcastNotificationToTopic(topic string) error {
 		},
 	}
 
+	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
+		env.Logger.Warn("send xmpp error: %v", err)
+		return fmt.Errorf("send xmpp error: %v", err)
+	}
+
+	return nil
+
+}
+
+func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) error {
+	msg := getXmppMessageFromNotification(notification)
 	msg.To = fmt.Sprintf("/topics/%s", topic)
 
 	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
@@ -236,7 +248,6 @@ func (appServer *AppServer) BroadcastNotificationToTopic(topic string) error {
 
 func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {
 	msg_id := genMessageId()
-	push_id := strconv.Itoa(rand.Int() % 10000)
 
 	return &gcm.XmppMessage{
 		MessageId: msg_id,
@@ -248,7 +259,7 @@ func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage
 		// TODO handle confirm
 		Data: gcm.Data{
 			"type":    NOTIFICATION_TYPE,
-			"push_id": push_id,
+			"push_id": notification.PushId,
 			"tpl":     notification.Tpl,
 			"title":   notification.Title,
 			"digest":  notification.Digest,

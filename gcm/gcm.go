@@ -17,14 +17,15 @@ import (
 )
 
 const (
-	CCSAck        = "ack"
-	CCSNack       = "nack"
-	CCSControl    = "control"
-	CCSReceipt    = "receipt"
-	HighPriority  = "high"
-	LowPriority   = "low"
-	httpAddress   = "https://gcm-http.googleapis.com/gcm/send"
-	xmppHost      = "gcm.googleapis.com"
+	CCSAck       = "ack"
+	CCSNack      = "nack"
+	CCSControl   = "control"
+	CCSReceipt   = "receipt"
+	HighPriority = "high"
+	LowPriority  = "low"
+	httpAddress  = "https://gcm-http.googleapis.com/gcm/send"
+	//	xmppHost      = "gcm.googleapis.com"
+	xmppHost      = "fcm-xmpp.googleapis.com"
 	xmppPort      = "5235"
 	xmppAddress   = xmppHost + ":" + xmppPort
 	ccsMinBackoff = 1 * time.Second
@@ -541,5 +542,6 @@ func authHeader(apiKey string) string {
 }
 
 func xmppUser(senderId string) string {
-	return senderId + "@" + xmppHost
+	//	return senderId + "@" + xmppHost
+	return senderId + "@gcm.googleapis.com"
 }
