@@ -29,7 +29,6 @@ func home(w http.ResponseWriter, r *http.Request) {
 
 func sendall(w http.ResponseWriter, r *http.Request) {
 	notification := &fcm.Notification{}
-
 	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": fmt.Sprintf("%v", err),
@@ -43,7 +42,6 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
 	notification.Options = fcm.NewNotificationDefaultOptions()
 	go func() {
 		devices, err := env.DeviceMapper.GetAllDevice()
@@ -95,7 +93,40 @@ func reset(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendToDevices(w http.ResponseWriter, r *http.Request) {
+	req := struct {
+		To           string           `json:"to"`
+		Notification fcm.Notification `json:"notification"`
+	}{}
 
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("%v", err),
+		})
+		return
+	}
+
+	if req.Notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "only support tpl 2",
+		})
+		return
+	}
+	req.Notification.Options = fcm.NewNotificationDefaultOptions()
+
+	if device, err := env.DeviceMapper.GetDeviceById(req.To); err != nil || device == nil {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "device not found",
+		})
+		return
+	} else {
+		go func() {
+			appServer.PushNotificationToDevice(device, &req.Notification)
+		}()
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "ok",
+	})
 }
 
 func getNewsDetail(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +134,7 @@ func getNewsDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-    fmt.Printf("starts")
+	fmt.Printf("starts")
 	var err error
 	if err = env.Init(); err != nil {
 		fmt.Printf("init error: %v\n", err)
