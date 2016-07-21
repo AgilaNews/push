@@ -18,3 +18,4 @@ fi
 
 go build -o $BIN/$APP_NAME -a  main/main.go
 cp conf/* $CONF/
+cp bin/* $BIN/
