@@ -57,9 +57,9 @@ func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
 func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 	env.Logger.Debug("onNAck %v", msg)
 	if msg.Error == "DEVICE_UNREGISTERED" {
-		env.Logger.Info("Token %s unregistered", msg.From)
 		if device, err := env.DeviceMapper.GetDeviceByToken(msg.From); err == nil {
 			if device != nil {
+				env.Logger.Info("[UNREG][%v]", device.DeviceId)
 				env.DeviceMapper.RemoveDevice(device)
 			}
 		}
@@ -99,7 +99,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 			return
 		} else {
 			if device != nil && device.Token != token {
-				env.Logger.Info("device %v refreshed", device.DeviceId)
+				env.Logger.Info("[REF][%v]", device.DeviceId)
 				env.DeviceMapper.RemoveDevice(device)
 			}
 
@@ -112,7 +112,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 				OsVersion:     os_version,
 				Vendor:        vendor,
 			}
-			env.Logger.Info("add new device %v to map", device.DeviceId)
+			env.Logger.Info("[NEW][%v]", device.DeviceId)
 			env.DeviceMapper.AddNewDevice(device)
 			appServer.ConfirmRegistration(device, msg.MessageId)
 		}
@@ -120,7 +120,6 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 	case UPSTREAM_UNREGISTER:
 		device_id, ok := msg.Data["device_id"].(string)
 		if !ok {
-			env.Logger.Info("error get device_id")
 			return
 		}
 		if device, err := env.DeviceMapper.GetDeviceById(device_id); err != nil {
@@ -130,7 +129,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 			if device != nil {
 				env.DeviceMapper.RemoveDevice(device)
 			}
-			env.Logger.Info("unregister from unseed device %v", device_id)
+			env.Logger.Info("[UNREG_UNSEEN][%v]", device_id)
 
 		}
 	default:
@@ -196,13 +195,13 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		appServer.SecurityKey, *confirm); err != nil {
 		env.Logger.Warn("send confirm error %v", err)
 	}
-	env.Logger.Info("confirm register of %v:%v", device.DeviceId, device.Token)
+	env.Logger.Info("[CONFIRMED][%v]", device.DeviceId)
 }
 func (appServer *AppServer) PushNotificationToDevice(dev *devicemapper.Device, notification *Notification) error {
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = dev.Token
 
-	env.Logger.Info("push message to %v:%v", dev.DeviceId, dev.Token)
+	env.Logger.Info("[NOTIFY][%v]", dev.DeviceId)
 
 	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
 		env.Logger.Warn("send xmpp error: %v", err)
