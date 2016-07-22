@@ -185,7 +185,7 @@ func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
 		DelayWhileIdle:   false,
-		TTL:              1,
+		TTL:              14400,
 		OnReceiptHandler: nil,
 	}
 }
