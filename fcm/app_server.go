@@ -181,8 +181,8 @@ func (appServer *AppServer) Work() {
 func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
-		DelayWhileIdle:   true,
-		TTL:              600,
+		DelayWhileIdle:   false,
+		TTL:              7200,
 		OnReceiptHandler: nil,
 	}
 }
@@ -226,7 +226,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
 		DelayWhileIdle: false,
-		TimeToLive:     600,
+		TimeToLive:     7200,
 		Data: gcm.Data{
 			"type": REREGISTER_TYPE,
 		},
