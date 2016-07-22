@@ -6,6 +6,7 @@ import (
 	"fcm/gcm"
 	"fmt"
 	"github.com/satori/go.uuid"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -69,11 +70,13 @@ func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
 	if msg.Data["message_status"] == "MESSAGE_SENT_TO_DEVICE" {
 		//		env.Logger.Debug("OnReceipt from %v at %v", msg.Data["device_registration_id"], msg.Data["message_sent_timestamp"])
+		t, _ := strconv.ParseInt(msg.Data["message_sent_timestamp"].(string), 10, 64)
+		at := time.Unix(t/1000, (t%1000)*1000).String()
 		if device, err := env.DeviceMapper.GetDeviceByToken(msg.Data["device_registration_id"].(string)); err == nil {
 			if device != nil {
-				env.Logger.Info("[RECEIVED][%v]", device.DeviceId)
+				env.Logger.Info("[RECEIVED][%v][AT:%s]", device.DeviceId, at)
 			} else {
-				env.Logger.Info("[RECEIVED][UNSEEN]")
+				env.Logger.Info("[RECEIVED][UNSEEN][at%s]", at)
 			}
 		}
 	}
@@ -182,7 +185,7 @@ func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
 		DelayWhileIdle:   false,
-		TTL:              7200,
+		TTL:              1,
 		OnReceiptHandler: nil,
 	}
 }
@@ -192,7 +195,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		To:         device.Token,
 		MessageId:  msg_id,
 		Priority:   gcm.HighPriority,
-		TimeToLive: 600,
+		TimeToLive: 14400,
 		Data: gcm.Data{
 			"type":   CONFIRM_TYPE,
 			"status": REGISTER_SUCCESS,
@@ -226,7 +229,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
 		DelayWhileIdle: false,
-		TimeToLive:     7200,
+		TimeToLive:     14400,
 		Data: gcm.Data{
 			"type": REREGISTER_TYPE,
 		},
