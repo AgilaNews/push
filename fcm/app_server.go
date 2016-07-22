@@ -68,8 +68,14 @@ func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 
 func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
 	if msg.Data["message_status"] == "MESSAGE_SENT_TO_DEVICE" {
-		env.Logger.Debug("OnReceipt from %v at %v", msg.Data["device_registration_id"], msg.Data["message_sent_timestamp"])
-        env.Logger.Info("[RECEIVED][%v]", msg.Data["device_registration_id"])
+		//		env.Logger.Debug("OnReceipt from %v at %v", msg.Data["device_registration_id"], msg.Data["message_sent_timestamp"])
+		if device, err := env.DeviceMapper.GetDeviceByToken(msg.Data["device_registration_id"].(string)); err == nil {
+			if device != nil {
+				env.Logger.Info("[RECEIVED][%v]", device.DeviceId)
+			} else {
+				env.Logger.Info("[RECEIVED][UNSEEN]")
+			}
+		}
 	}
 }
 
