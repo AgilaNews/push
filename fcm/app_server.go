@@ -69,6 +69,7 @@ func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
 	if msg.Data["message_status"] == "MESSAGE_SENT_TO_DEVICE" {
 		env.Logger.Debug("OnReceipt from %v at %v", msg.Data["device_registration_id"], msg.Data["message_sent_timestamp"])
+        env.Logger.Info("[RECEIVED][%v]", msg.Data["device_registration_id"])
 	}
 }
 
@@ -152,6 +153,7 @@ func (appServer *AppServer) Stop() {
 
 func (appServer *AppServer) Work() {
 	env.Logger.Info("app server starts")
+	gcm.DebugMode = true
 	for {
 		if err := gcm.Listen(appServer.SenderId, appServer.SecurityKey, gcm.MessageHandler{
 			OnAck:       appServer.onAck,

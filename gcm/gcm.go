@@ -24,8 +24,8 @@ const (
 	HighPriority = "high"
 	LowPriority  = "low"
 	httpAddress  = "https://gcm-http.googleapis.com/gcm/send"
-	//	xmppHost      = "gcm.googleapis.com"
-	xmppHost      = "fcm-xmpp.googleapis.com"
+	xmppHost     = "gcm.googleapis.com"
+	//	xmppHost      = "fcm-xmpp.googleapis.com"
 	xmppPort      = "5235"
 	xmppAddress   = xmppHost + ":" + xmppPort
 	ccsMinBackoff = 1 * time.Second

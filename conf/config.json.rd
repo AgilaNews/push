@@ -1,7 +1,7 @@
 {
     "log": {
         "path": "/data/logs/fcm_app_server/fcm_app_server.log",
-        "level": "INFO",
+        "level": "DEBUG",
         "console": true
     },
     "redis": {
