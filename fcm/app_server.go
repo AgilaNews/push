@@ -260,13 +260,12 @@ func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage
 	msg_id := genMessageId()
 
 	return &gcm.XmppMessage{
-		MessageId: msg_id,
-		//        CollapseKey: "",
+		MessageId:                msg_id,
 		Priority:                 notification.Options.Priority,
 		DelayWhileIdle:           notification.Options.DelayWhileIdle,
 		TimeToLive:               notification.Options.TTL,
 		DeliveryReceiptRequested: true,
-		// TODO handle confirm
+		ContentAvailable:         true,
 		Data: gcm.Data{
 			"type":    NOTIFICATION_TYPE,
 			"push_id": notification.PushId,
