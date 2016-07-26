@@ -272,7 +272,6 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 			}
 			switch cm.MessageType {
 			case CCSAck:
-				time.Sleep(10 * time.Second)
 				c.messages.Lock.Lock()
 				if _, ok := c.messages.m[cm.MessageId]; ok {
 					if h.OnAck != nil {
