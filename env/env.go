@@ -3,10 +3,10 @@ package env
 import (
 	"encoding/json"
 	"fcm/devicemapper"
-	"github.com/alecthomas/log4go"
+	"fmt"
 	"os"
-    "fcm/gcm"
-    "fmt"
+
+	"github.com/alecthomas/log4go"
 )
 
 type Configuration struct {
@@ -28,7 +28,6 @@ type Configuration struct {
 }
 
 var (
-	Logger       log4go.Logger
 	DeviceMapper devicemapper.DeviceMapper
 	Config       *Configuration
 
@@ -40,17 +39,16 @@ var (
 )
 
 func Init() error {
-    value := os.Getenv("RUN_ENV")
-    var conffile string
-    switch value {
-        case "rd":
-            conffile = "config.json.rd"
-            gcm.DebugMode = true
-        default:
-            conffile = "config.json.online"
-    }
-    conffile = "./conf/" + conffile
-    fmt.Println("loading config file: " + conffile)
+	value := os.Getenv("RUN_ENV")
+	var conffile string
+	switch value {
+	case "rd":
+		conffile = "config.json.rd"
+	default:
+		conffile = "config.json.online"
+	}
+	conffile = "./conf/" + conffile
+	fmt.Println("loading config file: " + conffile)
 
 	file, err := os.Open(conffile)
 	if err != nil {
@@ -68,17 +66,18 @@ func Init() error {
 	if level, ok = level_map[Config.Log.Level]; !ok {
 		level = log4go.INFO
 	}
-	Logger = make(log4go.Logger)
+
 	if Config.Log.Console {
-		Logger.AddFilter("stdout", level, log4go.NewConsoleLogWriter())
+		log4go.Global.AddFilter("stdout", level, log4go.NewConsoleLogWriter())
 	}
 
-	Logger.AddFilter("log", level, log4go.NewFileLogWriter(Config.Log.Path, false))
+	log4go.Global.AddFilter("log", level, log4go.NewFileLogWriter(Config.Log.Path, false))
 
 	if DeviceMapper, err = devicemapper.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
-		Logger.Info("init device mapper fail")
+		log4go.Global.Info("init device mapper fail")
 		return err
 	}
-	Logger.Info("env init success")
+
+	log4go.Global.Info("env init success")
 	return nil
 }

@@ -5,10 +5,12 @@ import (
 	"fcm/env"
 	"fcm/gcm"
 	"fmt"
-	"github.com/satori/go.uuid"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alecthomas/log4go"
+	"github.com/satori/go.uuid"
 )
 
 const (
@@ -57,15 +59,15 @@ type NotificationOptions struct {
 }
 
 func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
-	env.Logger.Info("OnAck %v", msg.MessageId, msg.From)
+	log4go.Global.Info("[OnAck][%s]", msg.MessageId)
 }
 
 func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
-	env.Logger.Warn("onNAck %v:%v", msg.MessageId, msg.Error)
+	log4go.Global.Warn("onNAck %v:%v", msg.MessageId, msg.Error)
 	if msg.Error == "DEVICE_UNREGISTERED" {
 		if device, err := env.DeviceMapper.GetDeviceByToken(msg.From); err == nil {
 			if device != nil {
-				env.Logger.Info("[UNREG][%v]", device.DeviceId)
+				log4go.Global.Info("[UNREG][%v]", device.DeviceId)
 				env.DeviceMapper.RemoveDevice(device)
 			}
 		}
@@ -74,26 +76,28 @@ func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 
 func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
 	if msg.Data["message_status"] == "MESSAGE_SENT_TO_DEVICE" {
-		//		env.Logger.Debug("OnReceipt from %v at %v", msg.Data["device_registration_id"], msg.Data["message_sent_timestamp"])
 		t, _ := strconv.ParseInt(msg.Data["message_sent_timestamp"].(string), 10, 64)
 		at := time.Unix(t/1000, (t%1000)*1000).String()
 		if device, err := env.DeviceMapper.GetDeviceByToken(msg.Data["device_registration_id"].(string)); err == nil {
 			if device != nil {
-				env.Logger.Info("[RECEIVED][%v][AT:%s]", device.DeviceId, at)
+				log4go.Global.Info("[RECEIVED][%v][%s][AT:%s]", device.DeviceId, msg.MessageId, at)
 			} else {
-				env.Logger.Info("[RECEIVED][UNSEEN][at%s]", at)
+				log4go.Global.Info("[RECEIVED][UNSEEN][%s][at%s]", msg.MessageId, at)
 			}
 		}
+	} else {
+		log4go.Global.Warn("[UNKNOWN_ONRECEPIT][%v]", msg)
 	}
+
 }
 
 func (appServer *AppServer) onSendError(msg *gcm.CcsMessage) {
-	env.Logger.Debug("on send error %v", msg)
+	log4go.Global.Debug("on send error %v", msg)
 }
 
 func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 	t := msg.Data["type"].(string)
-	env.Logger.Debug("on received message type:%v %v", t, msg)
+	log4go.Global.Debug("on received message type:%v %v", t, msg)
 
 	switch t {
 	case UPSTREAM_REGISTER:
@@ -110,11 +114,11 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 		}
 
 		if device, err := env.DeviceMapper.GetDeviceById(device_id); err != nil {
-			env.Logger.Warn("get device error: %v", err)
+			log4go.Global.Warn("get device error: %v", err)
 			return
 		} else {
 			if device != nil && device.Token != token {
-				env.Logger.Info("[REF][%v]", device.DeviceId)
+				log4go.Global.Info("[REF][%v]", device.DeviceId)
 				env.DeviceMapper.RemoveDevice(device)
 			}
 
@@ -127,7 +131,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 				OsVersion:     os_version,
 				Vendor:        vendor,
 			}
-			env.Logger.Info("[NEW][%v]", device.DeviceId)
+			log4go.Global.Info("[NEW][%v]", device.DeviceId)
 			env.DeviceMapper.AddNewDevice(device)
 			appServer.ConfirmRegistration(device, msg.MessageId)
 		}
@@ -138,17 +142,17 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 			return
 		}
 		if device, err := env.DeviceMapper.GetDeviceById(device_id); err != nil {
-			env.Logger.Warn("get device error: %v", err)
+			log4go.Global.Warn("get device error: %v", err)
 			return
 		} else {
 			if device != nil {
 				env.DeviceMapper.RemoveDevice(device)
 			}
-			env.Logger.Info("[UNREG_UNSEEN][%v]", device_id)
+			log4go.Global.Info("[UNREG_UNSEEN][%v]", device_id)
 
 		}
 	default:
-		env.Logger.Warn("unknown type %v", t)
+		log4go.Global.Warn("unknown type %v", t)
 	}
 }
 
@@ -166,8 +170,8 @@ func (appServer *AppServer) Stop() {
 }
 
 func (appServer *AppServer) Work() {
-	env.Logger.Info("app server starts")
-	gcm.DebugMode = true
+	log4go.Global.Info("app server starts")
+
 	for {
 		if err := gcm.Listen(appServer.SenderId, appServer.SecurityKey, gcm.MessageHandler{
 			OnAck:       appServer.onAck,
@@ -180,7 +184,7 @@ func (appServer *AppServer) Work() {
 			appServer.stop <- true
 			time.Sleep(3 * time.Second)
 			//}
-			env.Logger.Error("listen to gcm error: %v", err)
+			log4go.Global.Error("listen to gcm error: %v", err)
 		}
 		time.Sleep(time.Second)
 	}
@@ -209,19 +213,23 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 
 	if _, _, err := gcm.SendXmpp(appServer.SenderId,
 		appServer.SecurityKey, *confirm); err != nil {
-		env.Logger.Warn("send confirm error %v", err)
+		log4go.Global.Warn("send confirm error %v", err)
 	}
-	env.Logger.Info("[CONFIRMED][%v]", device.DeviceId)
+	log4go.Global.Info("[CONFIRMED][%v]", device.DeviceId)
 }
 
 func (appServer *AppServer) PushNotificationToDevice(dev *devicemapper.Device, notification *Notification) error {
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = dev.Token
 
-	env.Logger.Info("[NOTIFY][%v]", dev.DeviceId)
+	t := dev.Token
+	if len(t) > 32 {
+		t = t[:32]
+	}
+	log4go.Global.Info("[NOTIFY][%v][%s]", dev.DeviceId, t)
 
 	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
-		env.Logger.Warn("send xmpp error: %v", err)
+		log4go.Global.Warn("send xmpp error: %v", err)
 		return fmt.Errorf("send xmpp error: %v", err)
 	}
 
@@ -242,7 +250,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 	}
 
 	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
-		env.Logger.Warn("send xmpp error: %v", err)
+		log4go.Global.Warn("send xmpp error: %v", err)
 		return fmt.Errorf("send xmpp error: %v", err)
 	}
 
@@ -254,7 +262,7 @@ func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notificat
 	msg.To = fmt.Sprintf("/topics/%s", topic)
 
 	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
-		env.Logger.Warn("send xmpp error: %v", err)
+		log4go.Global.Warn("send xmpp error: %v", err)
 		return fmt.Errorf("send xmpp error: %v", err)
 	}
 

@@ -5,35 +5,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/alecthomas/log4go"
 	"github.com/jpillora/backoff"
 	"github.com/mattn/go-xmpp"
 	"github.com/pborman/uuid"
 )
 
 const (
-	CCSAck       = "ack"
-	CCSNack      = "nack"
-	CCSControl   = "control"
-	CCSReceipt   = "receipt"
-	HighPriority = "high"
-	LowPriority  = "low"
-	httpAddress  = "https://gcm-http.googleapis.com/gcm/send"
-	//xmppHost     = "gcm.googleapis.com"
+	CCSAck         = "ack"
+	CCSNack        = "nack"
+	CCSControl     = "control"
+	CCSReceipt     = "receipt"
+	HighPriority   = "high"
+	LowPriority    = "low"
+	httpAddress    = "https://gcm-http.googleapis.com/gcm/send"
 	xmppHost       = "fcm-xmpp.googleapis.com"
 	xmppPort       = "5235"
 	xmppAddress    = xmppHost + ":" + xmppPort
 	ccsMinBackoff  = 1 * time.Second
-	unackThreshold = 100
+	unackThreshold = 1
 )
 
 var (
-	DebugMode         = false
 	DefaultMinBackoff = 1 * time.Second
 	DefaultMaxBackoff = 10 * time.Second
 	retryableErrors   = map[string]bool{
@@ -145,18 +143,12 @@ type httpGcmClient struct {
 	retryAfter string
 }
 
-func debug(m string, v interface{}) {
-	if DebugMode {
-		log.Printf(m+":%+v", v)
-	}
-}
-
 func (c *httpGcmClient) send(apiKey string, m HttpMessage) (*HttpResponse, error) {
 	bs, err := json.Marshal(m)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling message>%v", err)
 	}
-	debug("sending", string(bs))
+	log4go.Global.Debug("sending", string(bs))
 	req, err := http.NewRequest("POST", c.GcmURL, bytes.NewReader(bs))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request>%v", err)
@@ -173,7 +165,7 @@ func (c *httpGcmClient) send(apiKey string, m HttpMessage) (*HttpResponse, error
 	if err != nil {
 		return gcmResp, fmt.Errorf("error reading http response body>%v", err)
 	}
-	debug("received body", string(body))
+	log4go.Global.Debug("received body", string(body))
 	err = json.Unmarshal(body, &gcmResp)
 	if err != nil {
 		return gcmResp, fmt.Errorf("error unmarshaling json from body: %v", err)
@@ -216,7 +208,7 @@ func newXmppGcmClient(senderID string, apiKey string) (*xmppGcmClient, error) {
 		return xc, nil
 	}
 
-	nc, err := xmpp.NewClient(xmppAddress, xmppUser(senderID), apiKey, DebugMode)
+	nc, err := xmpp.NewClient(xmppAddress, xmppUser(senderID), apiKey, false)
 	if err != nil {
 		return nil, fmt.Errorf("error connecting client>%v", err)
 	}
@@ -275,17 +267,17 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 			cm := &CcsMessage{}
 			err = json.Unmarshal([]byte(v.Other[0]), cm)
 			if err != nil {
-				debug("Error unmarshaling ccs message: %v", err)
+				log4go.Global.Debug("Error unmarshaling ccs message: %v", err)
 				continue
 			}
 			switch cm.MessageType {
 			case CCSAck:
+				time.Sleep(10 * time.Second)
 				c.messages.Lock.Lock()
 				if _, ok := c.messages.m[cm.MessageId]; ok {
 					if h.OnAck != nil {
 						go h.OnAck(cm)
 					}
-					time.Sleep(10 * time.Second)
 					delete(c.messages.m, cm.MessageId)
 					c.messages.Cond.Signal()
 				}
@@ -305,21 +297,20 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 					c.messages.Lock.Unlock()
 				}
 			default:
-				debug("Unknown ccs message: %v", cm)
+				log4go.Global.Debug("Unknown ccs message: %v", cm)
 			}
 		case "normal":
 			cm := &CcsMessage{}
 			err = json.Unmarshal([]byte(v.Other[0]), cm)
 			if err != nil {
-				debug("Error unmarshaling ccs message: %v", err)
+				log4go.Global.Debug("Error unmarshaling ccs message: %v", err)
 				continue
 			}
 			switch cm.MessageType {
 			case CCSControl:
-				// TODO(silvano): create a new connection, drop the old one 'after a while'
-				debug("control message! %v", cm)
+				log4go.Global.Warn("control message! %v", cm)
 			case CCSReceipt:
-				debug("receipt! %v", cm)
+				log4go.Global.Debug("receipt! %v", cm)
 				origMessageID := strings.TrimPrefix(cm.MessageId, "dr2:")
 				ack := XmppMessage{To: cm.From, MessageId: origMessageID, MessageType: CCSAck}
 				c.reply(ack)
@@ -334,9 +325,9 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 				}
 			}
 		case "error":
-			debug("error response %v", v)
+			log4go.Global.Debug("error response %v", v)
 		default:
-			debug("unknown message type %v", v)
+			log4go.Global.Debug("unknown message type %v", v)
 		}
 	}
 }
@@ -346,6 +337,7 @@ func (c *xmppGcmClient) reply(m XmppMessage) {
 	defer c.Unlock()
 
 	payload, err := formatStanza(m)
+	log4go.Global.Info("[RPLY][%s]", m.MessageId)
 	if err == nil {
 		c.XmppClient.SendOrg(payload)
 	}
@@ -357,11 +349,10 @@ func (c *xmppGcmClient) send(m XmppMessage) (string, int, error) {
 	}
 	c.messages.Lock.Lock()
 	for len(c.messages.m) >= unackThreshold {
-		debug("current unack message larger than threshold", len(c.messages.m))
+		log4go.Global.Info("[FCTR]")
 		c.messages.Cond.Wait()
 	}
 
-	debug("got quota", len(c.messages.m))
 	if _, ok := c.messages.m[m.MessageId]; !ok {
 		b := newExponentialBackoff()
 		if b.b.Min < ccsMinBackoff {
@@ -375,7 +366,14 @@ func (c *xmppGcmClient) send(m XmppMessage) (string, int, error) {
 	if err != nil {
 		return m.MessageId, 0, err
 	}
-	debug("Sending XMPP: ", payload)
+
+	to := m.To
+	if len(m.To) > 32 {
+		to = to[:32]
+	}
+
+	log4go.Global.Info("[RSND][to:%s][mid:%s][type:%s]", to, m.MessageId, m.MessageType)
+
 	c.Lock()
 	defer c.Unlock()
 	bytes, err := c.XmppClient.SendOrg(payload)
