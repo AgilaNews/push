@@ -25,10 +25,11 @@ const (
 	LowPriority  = "low"
 	httpAddress  = "https://gcm-http.googleapis.com/gcm/send"
 	//xmppHost     = "gcm.googleapis.com"
-	xmppHost      = "fcm-xmpp.googleapis.com"
-	xmppPort      = "5235"
-	xmppAddress   = xmppHost + ":" + xmppPort
-	ccsMinBackoff = 1 * time.Second
+	xmppHost       = "fcm-xmpp.googleapis.com"
+	xmppPort       = "5235"
+	xmppAddress    = xmppHost + ":" + xmppPort
+	ccsMinBackoff  = 1 * time.Second
+	unackThreshold = 100
 )
 
 var (
@@ -48,12 +49,6 @@ var (
 		m: make(map[string]*xmppGcmClient),
 	}
 )
-
-func debug(m string, v interface{}) {
-	if DebugMode {
-		log.Printf(m+":%+v", v)
-	}
-}
 
 type HttpMessage struct {
 	To                    string        `json:"to,omitempty"`
@@ -150,6 +145,12 @@ type httpGcmClient struct {
 	retryAfter string
 }
 
+func debug(m string, v interface{}) {
+	if DebugMode {
+		log.Printf(m+":%+v", v)
+	}
+}
+
 func (c *httpGcmClient) send(apiKey string, m HttpMessage) (*HttpResponse, error) {
 	bs, err := json.Marshal(m)
 	if err != nil {
@@ -195,8 +196,9 @@ type xmppGcmClient struct {
 	sync.RWMutex
 	XmppClient xmpp.Client
 	messages   struct {
-		sync.RWMutex
-		m map[string]*messageLogEntry
+		Lock sync.RWMutex
+		Cond *sync.Cond
+		m    map[string]*messageLogEntry
 	}
 	senderID string
 	isClosed bool
@@ -222,13 +224,15 @@ func newXmppGcmClient(senderID string, apiKey string) (*xmppGcmClient, error) {
 	xc := &xmppGcmClient{
 		XmppClient: *nc,
 		messages: struct {
-			sync.RWMutex
-			m map[string]*messageLogEntry
+			Lock sync.RWMutex
+			Cond *sync.Cond
+			m    map[string]*messageLogEntry
 		}{
 			m: make(map[string]*messageLogEntry),
 		},
 		senderID: senderID,
 	}
+	xc.messages.Cond = sync.NewCond(&xc.messages.Lock)
 
 	xmppClients.m[senderID] = xc
 	return xc, nil
@@ -276,26 +280,29 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 			}
 			switch cm.MessageType {
 			case CCSAck:
-				c.messages.Lock()
+				c.messages.Lock.Lock()
 				if _, ok := c.messages.m[cm.MessageId]; ok {
 					if h.OnAck != nil {
 						go h.OnAck(cm)
 					}
+					time.Sleep(10 * time.Second)
 					delete(c.messages.m, cm.MessageId)
+					c.messages.Cond.Signal()
 				}
-				c.messages.Unlock()
+				c.messages.Lock.Unlock()
 			case CCSNack:
 				if retryableErrors[cm.Error] {
 					c.retryMessage(*cm, h)
 				} else {
-					c.messages.Lock()
+					c.messages.Lock.Lock()
 					if _, ok := c.messages.m[cm.MessageId]; ok {
 						if h.OnNAck != nil {
 							go h.OnNAck(cm)
 						}
 						delete(c.messages.m, cm.MessageId)
+						c.messages.Cond.Signal()
 					}
-					c.messages.Unlock()
+					c.messages.Lock.Unlock()
 				}
 			default:
 				debug("Unknown ccs message: %v", cm)
@@ -315,13 +322,13 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 				debug("receipt! %v", cm)
 				origMessageID := strings.TrimPrefix(cm.MessageId, "dr2:")
 				ack := XmppMessage{To: cm.From, MessageId: origMessageID, MessageType: CCSAck}
-				c.send(ack)
+				c.reply(ack)
 				if h.OnReceipt != nil {
 					go h.OnReceipt(cm)
 				}
 			default:
 				ack := XmppMessage{To: cm.From, MessageId: cm.MessageId, MessageType: CCSAck}
-				c.send(ack)
+				c.reply(ack)
 				if h.OnMessage != nil {
 					go h.OnMessage(cm)
 				}
@@ -334,11 +341,27 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 	}
 }
 
+func (c *xmppGcmClient) reply(m XmppMessage) {
+	c.Lock()
+	defer c.Unlock()
+
+	payload, err := formatStanza(m)
+	if err == nil {
+		c.XmppClient.SendOrg(payload)
+	}
+}
+
 func (c *xmppGcmClient) send(m XmppMessage) (string, int, error) {
 	if m.MessageId == "" {
 		m.MessageId = uuid.New()
 	}
-	c.messages.Lock()
+	c.messages.Lock.Lock()
+	for len(c.messages.m) >= unackThreshold {
+		debug("current unack message larger than threshold", len(c.messages.m))
+		c.messages.Cond.Wait()
+	}
+
+	debug("got quota", len(c.messages.m))
 	if _, ok := c.messages.m[m.MessageId]; !ok {
 		b := newExponentialBackoff()
 		if b.b.Min < ccsMinBackoff {
@@ -346,25 +369,22 @@ func (c *xmppGcmClient) send(m XmppMessage) (string, int, error) {
 		}
 		c.messages.m[m.MessageId] = &messageLogEntry{body: &m, backoff: b}
 	}
-	c.messages.Unlock()
+	c.messages.Lock.Unlock()
 
-	stanza := `<message id=""><gcm xmlns="google:mobile:data">%v</gcm></message>`
-	body, err := json.Marshal(m)
+	payload, err := formatStanza(m)
 	if err != nil {
-		return m.MessageId, 0, fmt.Errorf("could not unmarshal body of xmpp message>%v", err)
+		return m.MessageId, 0, err
 	}
-	bs := string(body)
-
-	debug("Sending XMPP: ", fmt.Sprintf(stanza, bs))
+	debug("Sending XMPP: ", payload)
 	c.Lock()
 	defer c.Unlock()
-	bytes, err := c.XmppClient.SendOrg(fmt.Sprintf(stanza, bs))
+	bytes, err := c.XmppClient.SendOrg(payload)
 	return m.MessageId, bytes, err
 }
 
 func (c *xmppGcmClient) retryMessage(cm CcsMessage, h MessageHandler) {
-	c.messages.RLock()
-	defer c.messages.RUnlock()
+	c.messages.Lock.RLock()
+	defer c.messages.Lock.RUnlock()
 	if me, ok := c.messages.m[cm.MessageId]; ok {
 		if me.backoff.sendAnother() {
 			go func(m *messageLogEntry) {
@@ -372,7 +392,6 @@ func (c *xmppGcmClient) retryMessage(cm CcsMessage, h MessageHandler) {
 				c.send(*m.body)
 			}(me)
 		} else {
-			debug("Exponential backoff failed over limit for message: ", me)
 			if h.OnSendError != nil {
 				go h.OnSendError(&cm)
 			}
@@ -543,4 +562,15 @@ func authHeader(apiKey string) string {
 
 func xmppUser(senderId string) string {
 	return senderId + "@gcm.googleapis.com"
+}
+
+func formatStanza(m XmppMessage) (string, error) {
+	stanza := `<message id=""><gcm xmlns="google:mobile:data">%v</gcm></message>`
+	body, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("could not unmarshal body of xmpp message>%v", err)
+	}
+	bs := string(body)
+
+	return fmt.Sprintf(stanza, bs), nil
 }
