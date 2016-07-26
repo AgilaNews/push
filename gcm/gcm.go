@@ -60,11 +60,11 @@ type HttpMessage struct {
 	RegistrationIds       []string      `json:"registration_ids,omitempty"`
 	CollapseKey           string        `json:"collapse_key,omitempty"`
 	Priority              string        `json:"priority,omitempty"`
-	ContentAvailable      bool          `json:"content_available,omitempty"`
-	DelayWhileIdle        bool          `json:"delay_while_idle,omitempty"`
-	TimeToLive            int           `json:"time_to_live,omitempty"`
+	ContentAvailable      *bool         `json:"content_available,omitempty"`
+	DelayWhileIdle        *bool         `json:"delay_while_idle,omitempty"`
+	TimeToLive            *int          `json:"time_to_live,omitempty"`
 	RestrictedPackageName string        `json:"restricted_package_name,omitempty"`
-	DryRun                bool          `json:"dry_run,omitempty"`
+	DryRun                *bool         `json:"dry_run,omitempty"`
 	Data                  Data          `json:"data,omitempty"`
 	Notification          *Notification `json:"notification,omitempty"`
 }
@@ -75,11 +75,11 @@ type XmppMessage struct {
 	MessageType              string        `json:"message_type,omitempty"`
 	CollapseKey              string        `json:"collapse_key,omitempty"`
 	Priority                 string        `json:"priority,omitempty"`
-	ContentAvailable         bool          `json:"content_available,omitempty"`
-	DelayWhileIdle           bool          `json:"delay_while_idle"`
-	TimeToLive               int           `json:"time_to_live,omitempty"`
-	DeliveryReceiptRequested bool          `json:"delivery_receipt_requested,omitempty"`
-	DryRun                   bool          `json:"dry_run,omitempty"`
+	ContentAvailable         *bool         `json:"content_available,omitempty"`
+	DelayWhileIdle           *bool         `json:"delay_while_idle"`
+	TimeToLive               *int          `json:"time_to_live,omitempty"`
+	DeliveryReceiptRequested *bool         `json:"delivery_receipt_requested,omitempty"`
+	DryRun                   *bool         `json:"dry_run,omitempty"`
 	Data                     Data          `json:"data,omitempty"`
 	Notification             *Notification `json:"notification,omitempty"`
 }

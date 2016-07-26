@@ -27,6 +27,11 @@ const (
 	UPSTREAM_UNREGISTER = "2"
 )
 
+var (
+	true_addr  = true
+	false_addr = false
+)
+
 type AppServer struct {
 	stop        chan bool
 	SenderId    string
@@ -46,8 +51,8 @@ type Notification struct {
 
 type NotificationOptions struct {
 	Priority         string
-	DelayWhileIdle   bool
-	TTL              int
+	DelayWhileIdle   *bool
+	TTL              *int
 	OnReceiptHandler *func(token string) //only take effect when you send to certain device
 }
 
@@ -184,8 +189,8 @@ func (appServer *AppServer) Work() {
 func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
-		DelayWhileIdle:   false,
-		TTL:              3,
+		DelayWhileIdle:   &false_addr,
+		TTL:              new(int),
 		OnReceiptHandler: nil,
 	}
 }
@@ -195,7 +200,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		To:         device.Token,
 		MessageId:  msg_id,
 		Priority:   gcm.HighPriority,
-		TimeToLive: 3,
+		TimeToLive: new(int),
 		Data: gcm.Data{
 			"type":   CONFIRM_TYPE,
 			"status": REGISTER_SUCCESS,
@@ -208,6 +213,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 	}
 	env.Logger.Info("[CONFIRMED][%v]", device.DeviceId)
 }
+
 func (appServer *AppServer) PushNotificationToDevice(dev *devicemapper.Device, notification *Notification) error {
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = dev.Token
@@ -228,8 +234,8 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		To:             fmt.Sprintf("/topics/%s", topic),
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
-		DelayWhileIdle: false,
-		TimeToLive:     3,
+		DelayWhileIdle: &false_addr,
+		TimeToLive:     new(int),
 		Data: gcm.Data{
 			"type": REREGISTER_TYPE,
 		},
@@ -241,7 +247,6 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 	}
 
 	return nil
-
 }
 
 func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) error {
@@ -264,8 +269,8 @@ func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage
 		Priority:                 notification.Options.Priority,
 		DelayWhileIdle:           notification.Options.DelayWhileIdle,
 		TimeToLive:               notification.Options.TTL,
-		DeliveryReceiptRequested: true,
-		ContentAvailable:         true,
+		DeliveryReceiptRequested: &true_addr,
+		ContentAvailable:         &true_addr,
 		Data: gcm.Data{
 			"type":    NOTIFICATION_TYPE,
 			"push_id": notification.PushId,
