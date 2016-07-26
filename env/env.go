@@ -5,6 +5,7 @@ import (
 	"fcm/devicemapper"
 	"github.com/alecthomas/log4go"
 	"os"
+    "fcm/gcm"
     "fmt"
 )
 
@@ -44,6 +45,7 @@ func Init() error {
     switch value {
         case "rd":
             conffile = "config.json.rd"
+            gcm.DebugMode = true
         default:
             conffile = "config.json.online"
     }

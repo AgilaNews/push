@@ -52,11 +52,11 @@ type NotificationOptions struct {
 }
 
 func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
-	env.Logger.Debug("OnAck %v from %v received", msg.MessageId, msg.From)
+	env.Logger.Info("OnAck %v", msg.MessageId, msg.From)
 }
 
 func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
-	env.Logger.Debug("onNAck %v", msg)
+	env.Logger.Warn("onNAck %v:%v", msg.MessageId, msg.Error)
 	if msg.Error == "DEVICE_UNREGISTERED" {
 		if device, err := env.DeviceMapper.GetDeviceByToken(msg.From); err == nil {
 			if device != nil {
@@ -185,7 +185,7 @@ func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
 		DelayWhileIdle:   false,
-		TTL:              14400,
+		TTL:              0,
 		OnReceiptHandler: nil,
 	}
 }
@@ -195,7 +195,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		To:         device.Token,
 		MessageId:  msg_id,
 		Priority:   gcm.HighPriority,
-		TimeToLive: 14400,
+		TimeToLive: 0,
 		Data: gcm.Data{
 			"type":   CONFIRM_TYPE,
 			"status": REGISTER_SUCCESS,
@@ -229,7 +229,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
 		DelayWhileIdle: false,
-		TimeToLive:     14400,
+		TimeToLive:     0,
 		Data: gcm.Data{
 			"type": REREGISTER_TYPE,
 		},

@@ -542,6 +542,5 @@ func authHeader(apiKey string) string {
 }
 
 func xmppUser(senderId string) string {
-	//	return senderId + "@" + xmppHost
 	return senderId + "@gcm.googleapis.com"
 }
