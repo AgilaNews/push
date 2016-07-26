@@ -28,7 +28,7 @@ const (
 	xmppPort       = "5235"
 	xmppAddress    = xmppHost + ":" + xmppPort
 	ccsMinBackoff  = 1 * time.Second
-	unackThreshold = 1
+	unackThreshold = 100
 )
 
 var (
