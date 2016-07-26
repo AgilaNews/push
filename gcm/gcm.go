@@ -76,7 +76,7 @@ type XmppMessage struct {
 	CollapseKey              string        `json:"collapse_key,omitempty"`
 	Priority                 string        `json:"priority,omitempty"`
 	ContentAvailable         bool          `json:"content_available,omitempty"`
-	DelayWhileIdle           bool          `json:"delay_while_idle,omitempty"`
+	DelayWhileIdle           bool          `json:"delay_while_idle"`
 	TimeToLive               int           `json:"time_to_live,omitempty"`
 	DeliveryReceiptRequested bool          `json:"delivery_receipt_requested,omitempty"`
 	DryRun                   bool          `json:"dry_run,omitempty"`

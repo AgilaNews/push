@@ -185,7 +185,7 @@ func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
 		DelayWhileIdle:   false,
-		TTL:              0,
+		TTL:              3,
 		OnReceiptHandler: nil,
 	}
 }
@@ -195,7 +195,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		To:         device.Token,
 		MessageId:  msg_id,
 		Priority:   gcm.HighPriority,
-		TimeToLive: 0,
+		TimeToLive: 3,
 		Data: gcm.Data{
 			"type":   CONFIRM_TYPE,
 			"status": REGISTER_SUCCESS,
@@ -229,7 +229,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
 		DelayWhileIdle: false,
-		TimeToLive:     0,
+		TimeToLive:     3,
 		Data: gcm.Data{
 			"type": REREGISTER_TYPE,
 		},
