@@ -40,6 +40,8 @@ func home(w http.ResponseWriter, r *http.Request) {
 func http_sendall(w http.ResponseWriter, r *http.Request) {
 	req := struct {
 		Batch        int              `json:"batch"`
+		Start        int              `json:"start"`
+		Test         bool             `json:"test"`
 		Notification fcm.Notification `json:"notification"`
 	}{}
 
@@ -69,9 +71,10 @@ func http_sendall(w http.ResponseWriter, r *http.Request) {
 		devices, err := env.DeviceMapper.GetAllDevice()
 		env.Logger.Info("[SNDALL][%v]", len(devices))
 		if err == nil {
-			for i := 0; i < len(devices); i += req.Batch {
+			left := len(devices) - req.Start + 1
+			for i := req.Start; i < left; i += req.Batch {
 				msg.RegistrationIds = []string{}
-				for _, device := range devices[i:min(i+req.Batch, len(devices))] {
+				for _, device := range devices[i:min(i+req.Batch, left)] {
 					fmt.Println(device.Token)
 					msg.RegistrationIds = append(msg.RegistrationIds, device.Token)
 				}
@@ -81,6 +84,9 @@ func http_sendall(w http.ResponseWriter, r *http.Request) {
 					env.Logger.Info("[HTTP_BR_ERR][%v]", err)
 				} else {
 					env.Logger.Info("[HTTP_BR_RESP][%v]", resp)
+				}
+				if req.Test {
+					break
 				}
 			}
 		}
