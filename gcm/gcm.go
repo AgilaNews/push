@@ -235,7 +235,12 @@ func (c *XmppGcmClient) Listen(h MessageHandler) error {
 				break
 			}
 
-			log4go.Info("reconnect success")
+			c.messages.Lock.Lock()
+			c.messages.m = make(map[string]*messageLogEntry)
+
+			c.messages.Cond.Broadcast()
+			c.messages.Lock.Unlock()
+			log4go.Info("reconnect success, cleared map")
 			continue
 		}
 
