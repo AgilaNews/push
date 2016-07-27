@@ -44,6 +44,8 @@ func Init() error {
 	switch value {
 	case "rd":
 		conffile = "config.json.rd"
+	case "sandbox":
+		conffile = "config.json.sandbox"
 	default:
 		conffile = "config.json.online"
 	}
@@ -78,6 +80,6 @@ func Init() error {
 		return err
 	}
 
-	log4go.Global.Info("env init success")
+	log4go.Global.Info("env init success [%v]", value)
 	return nil
 }
