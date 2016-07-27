@@ -39,6 +39,8 @@ type AppServer struct {
 	SenderId    string
 	SecurityKey string
 	messageMap  map[string]*Notification
+
+	client *gcm.XmppGcmClient
 }
 
 type Notification struct {
@@ -63,7 +65,7 @@ func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
 }
 
 func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
-	log4go.Global.Warn("onNAck %v:%v", msg.MessageId, msg.Error)
+	log4go.Global.Info("onNAck %v:%v", msg.MessageId, msg.Error)
 	if msg.Error == "DEVICE_UNREGISTERED" {
 		if device, err := env.DeviceMapper.GetDeviceByToken(msg.From); err == nil {
 			if device != nil {
@@ -86,7 +88,7 @@ func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
 			}
 		}
 	} else {
-		log4go.Global.Warn("[UNKNOWN_ONRECEPIT][%v]", msg)
+		log4go.Global.Warn("[UNKNOWN_RECEPIT][%v]", msg)
 	}
 
 }
@@ -118,7 +120,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 			return
 		} else {
 			if device != nil && device.Token != token {
-				log4go.Global.Info("[REF][%v]", device.DeviceId)
+				log4go.Global.Info("[REM][%v]", device.DeviceId)
 				env.DeviceMapper.RemoveDevice(device)
 			}
 
@@ -157,10 +159,17 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 }
 
 func NewAppServer(sender_id, sk string) (*AppServer, error) {
+	gc, err := gcm.NewXmppGcmClient(env.Config.AppServer.SenderId,
+		env.Config.AppServer.SecurityKey)
+	if err != nil {
+		return nil, err
+	}
+
 	appServer := &AppServer{
 		stop:        make(chan bool),
 		SenderId:    sender_id,
 		SecurityKey: sk,
+		client:      gc,
 	}
 	return appServer, nil
 }
@@ -173,20 +182,17 @@ func (appServer *AppServer) Work() {
 	log4go.Global.Info("app server starts")
 
 	for {
-		if err := gcm.Listen(appServer.SenderId, appServer.SecurityKey, gcm.MessageHandler{
+		if err := appServer.client.Listen(gcm.MessageHandler{
 			OnAck:       appServer.onAck,
 			OnNAck:      appServer.onNAck,
 			OnMessage:   appServer.onMessageReceived,
 			OnReceipt:   appServer.onReceipt,
 			OnSendError: appServer.onSendError,
-		}, appServer.stop); err != nil {
-			//if err == io.EOF {
-			appServer.stop <- true
-			time.Sleep(3 * time.Second)
-			//}
-			log4go.Global.Error("listen to gcm error: %v", err)
+		}); err != nil {
+			log4go.Global.Warn("listen to gcm error: %v", err)
 		}
-		time.Sleep(time.Second)
+
+		log4go.Global.Info("reconnect")
 	}
 }
 
@@ -211,10 +217,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		},
 	}
 
-	if _, _, err := gcm.SendXmpp(appServer.SenderId,
-		appServer.SecurityKey, *confirm); err != nil {
-		log4go.Global.Warn("send confirm error %v", err)
-	}
+	go appServer.client.Send(*confirm)
 	log4go.Global.Info("[CONFIRMED][%v]", device.DeviceId)
 }
 
@@ -228,11 +231,7 @@ func (appServer *AppServer) PushNotificationToDevice(dev *devicemapper.Device, n
 	}
 	log4go.Global.Info("[NOTIFY][%v][%s]", dev.DeviceId, t)
 
-	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
-		log4go.Global.Warn("send xmpp error: %v", err)
-		return fmt.Errorf("send xmpp error: %v", err)
-	}
-
+	go appServer.client.Send(*msg)
 	return nil
 }
 
@@ -249,11 +248,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		},
 	}
 
-	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
-		log4go.Global.Warn("send xmpp error: %v", err)
-		return fmt.Errorf("send xmpp error: %v", err)
-	}
-
+	go appServer.client.Send(*msg)
 	return nil
 }
 
@@ -261,11 +256,7 @@ func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notificat
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = fmt.Sprintf("/topics/%s", topic)
 
-	if _, _, err := gcm.SendXmpp(appServer.SenderId, appServer.SecurityKey, *msg); err != nil {
-		log4go.Global.Warn("send xmpp error: %v", err)
-		return fmt.Errorf("send xmpp error: %v", err)
-	}
-
+	go appServer.client.Send(*msg)
 	return nil
 }
 

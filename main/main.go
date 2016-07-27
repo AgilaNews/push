@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alecthomas/log4go"
 )
@@ -53,12 +54,15 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 
 	notification.Options = fcm.NewNotificationDefaultOptions()
 	go func() {
-		devices, err := env.DeviceMapper.GetAllDevice()
-		log4go.Global.Info("[SNDALL][%v]", len(devices))
-		if err == nil {
-			for _, device := range devices {
-				appServer.PushNotificationToDevice(device, notification)
+		for {
+			devices, err := env.DeviceMapper.GetAllDevice()
+			log4go.Global.Info("[SNDALL][%v]", len(devices))
+			if err == nil {
+				for _, device := range devices {
+					appServer.PushNotificationToDevice(device, notification)
+				}
 			}
+			time.Sleep(500 * time.Millisecond)
 		}
 	}()
 	json.NewEncoder(w).Encode(map[string]string{

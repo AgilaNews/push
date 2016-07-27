@@ -40,12 +40,6 @@ var (
 		"InternalServerError":    true,
 		"INTERNAL_SERVER_ ERROR": true,
 	}
-	xmppClients = struct {
-		sync.Mutex
-		m map[string]*xmppGcmClient
-	}{
-		m: make(map[string]*xmppGcmClient),
-	}
 )
 
 type HttpMessage struct {
@@ -180,11 +174,11 @@ func (c httpGcmClient) getRetryAfter() string {
 }
 
 type xmppClient interface {
-	listen(h MessageHandler, stop chan<- bool) error
-	send(m XmppMessage) (int, error)
+	Listen(h MessageHandler) error
+	Send(m XmppMessage) (int, error)
 }
 
-type xmppGcmClient struct {
+type XmppGcmClient struct {
 	sync.RWMutex
 	XmppClient xmpp.Client
 	messages   struct {
@@ -193,7 +187,7 @@ type xmppGcmClient struct {
 		m    map[string]*messageLogEntry
 	}
 	senderID string
-	isClosed bool
+	apiKey   string
 }
 
 type messageLogEntry struct {
@@ -201,19 +195,13 @@ type messageLogEntry struct {
 	backoff *exponentialBackoff
 }
 
-func newXmppGcmClient(senderID string, apiKey string) (*xmppGcmClient, error) {
-	xmppClients.Lock()
-	defer xmppClients.Unlock()
-	if xc, ok := xmppClients.m[senderID]; ok {
-		return xc, nil
-	}
-
+func NewXmppGcmClient(senderID string, apiKey string) (*XmppGcmClient, error) {
 	nc, err := xmpp.NewClient(xmppAddress, xmppUser(senderID), apiKey, false)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting client>%v", err)
+		return nil, err
 	}
 
-	xc := &xmppGcmClient{
+	xc := &XmppGcmClient{
 		XmppClient: *nc,
 		messages: struct {
 			Lock sync.RWMutex
@@ -223,39 +211,32 @@ func newXmppGcmClient(senderID string, apiKey string) (*xmppGcmClient, error) {
 			m: make(map[string]*messageLogEntry),
 		},
 		senderID: senderID,
+		apiKey:   apiKey,
 	}
 	xc.messages.Cond = sync.NewCond(&xc.messages.Lock)
-
-	xmppClients.m[senderID] = xc
 	return xc, nil
 }
 
-func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
-	if stop != nil {
-		go func() {
-			select {
-			case <-stop:
-				fmt.Println("stop signal, reconnect")
-				c.Lock()
-				c.XmppClient.Close()
-				c.isClosed = true
-				c.Unlock()
-
-				xmppClients.Lock()
-				delete(xmppClients.m, c.senderID)
-				xmppClients.Unlock()
-			}
-		}()
-	}
+func (c *XmppGcmClient) Listen(h MessageHandler) error {
 	for {
 		stanza, err := c.XmppClient.Recv()
 		if err != nil {
-			c.RLock()
-			defer c.RUnlock()
-			if c.isClosed {
-				return nil
+			log4go.Warn("error on Recv>%v", err)
+
+			//reconnect
+			for {
+				nc, err := xmpp.NewClient(xmppAddress, xmppUser(c.senderID), c.apiKey, false)
+				if err != nil {
+					log4go.Warn("error connect :%v", err)
+					time.Sleep(3 * time.Second)
+					continue
+				}
+				c.XmppClient = *nc
+				break
 			}
-			return fmt.Errorf("error on Recv>%v", err)
+
+			log4go.Info("reconnect success")
+			continue
 		}
 
 		v, ok := stanza.(xmpp.Chat)
@@ -331,10 +312,7 @@ func (c *xmppGcmClient) listen(h MessageHandler, stop <-chan bool) error {
 	}
 }
 
-func (c *xmppGcmClient) reply(m XmppMessage) {
-	c.Lock()
-	defer c.Unlock()
-
+func (c *XmppGcmClient) reply(m XmppMessage) {
 	payload, err := formatStanza(m)
 	log4go.Global.Info("[RPLY][%s]", m.MessageId)
 	if err == nil {
@@ -342,7 +320,7 @@ func (c *xmppGcmClient) reply(m XmppMessage) {
 	}
 }
 
-func (c *xmppGcmClient) send(m XmppMessage) (string, int, error) {
+func (c *XmppGcmClient) Send(m XmppMessage) (string, int, error) {
 	if m.MessageId == "" {
 		m.MessageId = uuid.New()
 	}
@@ -371,22 +349,27 @@ func (c *xmppGcmClient) send(m XmppMessage) (string, int, error) {
 		to = to[:32]
 	}
 
-	log4go.Global.Info("[RSND][to:%s][mid:%s][type:%s]", to, m.MessageId, m.MessageType)
-
-	c.Lock()
-	defer c.Unlock()
-	bytes, err := c.XmppClient.SendOrg(payload)
-	return m.MessageId, bytes, err
+	for {
+		bytes, err := c.XmppClient.SendOrg(payload)
+		if err == nil {
+			log4go.Global.Info("[SND][to:%s][mid:%s][type:%s]", to, m.MessageId, m.MessageType)
+			return m.MessageId, bytes, err
+		} else {
+			log4go.Global.Warn("[SND_ERR][to:%s][mid:%s][type:%s]", to, m.MessageId, m.MessageType)
+			time.Sleep(3 * time.Second)
+		}
+	}
 }
 
-func (c *xmppGcmClient) retryMessage(cm CcsMessage, h MessageHandler) {
+func (c *XmppGcmClient) retryMessage(cm CcsMessage, h MessageHandler) {
 	c.messages.Lock.RLock()
 	defer c.messages.Lock.RUnlock()
+
 	if me, ok := c.messages.m[cm.MessageId]; ok {
 		if me.backoff.sendAnother() {
 			go func(m *messageLogEntry) {
 				m.backoff.wait()
-				c.send(*m.body)
+				c.Send(*m.body)
 			}(me)
 		} else {
 			if h.OnSendError != nil {
@@ -535,22 +518,6 @@ func checkResults(gcmResults []Result, recipients []string, resultsState multica
 		}
 	}
 	return doRetry, toRetry, nil
-}
-
-func SendXmpp(senderId, apiKey string, m XmppMessage) (string, int, error) {
-	c, err := newXmppGcmClient(senderId, apiKey)
-	if err != nil {
-		return "", 0, fmt.Errorf("error creating xmpp client>%v", err)
-	}
-	return c.send(m)
-}
-
-func Listen(senderId, apiKey string, h MessageHandler, stop <-chan bool) error {
-	cl, err := newXmppGcmClient(senderId, apiKey)
-	if err != nil {
-		return fmt.Errorf("error creating xmpp client>%v", err)
-	}
-	return cl.listen(h, stop)
 }
 
 func authHeader(apiKey string) string {
