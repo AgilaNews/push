@@ -51,7 +51,9 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	notification.Options = fcm.NewNotificationDefaultOptions()
+	if notification.Options == nil {
+		notification.Options = fcm.NewNotificationDefaultOptions()
+	}
 	go func() {
 		devices, err := env.DeviceMapper.GetAllDevice()
 		log4go.Global.Info("[SNDALL][%v]", len(devices))
@@ -85,7 +87,9 @@ func broadcast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	notification.Options = fcm.NewNotificationDefaultOptions()
+	if notification.Options == nil {
+		notification.Options = fcm.NewNotificationDefaultOptions()
+	}
 	go func() {
 		appServer.BroadcastNotificationToTopic(BROADCASE_TOPIC, notification)
 	}()
@@ -124,7 +128,9 @@ func sendToDevices(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	req.Notification.Options = fcm.NewNotificationDefaultOptions()
+	if req.Notification.Options == nil {
+		req.Notification.Options = fcm.NewNotificationDefaultOptions()
+	}
 
 	if device, err := env.DeviceMapper.GetDeviceById(req.To); err != nil || device == nil {
 		json.NewEncoder(w).Encode(map[string]string{

@@ -196,7 +196,7 @@ type messageLogEntry struct {
 }
 
 func NewXmppGcmClient(senderID string, apiKey string) (*XmppGcmClient, error) {
-	nc, err := xmpp.NewClient(xmppAddress, xmppUser(senderID), apiKey, false)
+	nc, err := xmpp.NewClient(xmppAddress, xmppUser(senderID), apiKey, true)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (c *XmppGcmClient) Listen(h MessageHandler) error {
 
 			//reconnect
 			for {
-				nc, err := xmpp.NewClient(xmppAddress, xmppUser(c.senderID), c.apiKey, false)
+				nc, err := xmpp.NewClient(xmppAddress, xmppUser(c.senderID), c.apiKey, true)
 				if err != nil {
 					log4go.Warn("error connect :%v", err)
 					time.Sleep(3 * time.Second)
@@ -354,6 +354,7 @@ func (c *XmppGcmClient) Send(m XmppMessage) (string, int, error) {
 		to = to[:32]
 	}
 
+	log4go.Global.Debug("[%v]", payload)
 	for {
 		bytes, err := c.XmppClient.SendOrg(payload)
 		if err == nil {

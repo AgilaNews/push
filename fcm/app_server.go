@@ -30,8 +30,9 @@ const (
 )
 
 var (
-	true_addr  = true
-	false_addr = false
+	true_addr   = true
+	false_addr  = false
+	default_ttl = 14400
 )
 
 type AppServer struct {
@@ -44,19 +45,19 @@ type AppServer struct {
 }
 
 type Notification struct {
-	Tpl     string `json:"tpl"`
-	NewsId  string `json:"news_id"`
-	Title   string `json:"title"`
-	Digest  string `json:"digest,omitempty"`
-	Image   string `json:"image"`
-	PushId  int    `json:"push_id"`
-	Options *NotificationOptions
+	Tpl     string               `json:"tpl"`
+	NewsId  string               `json:"news_id"`
+	Title   string               `json:"title"`
+	Digest  string               `json:"digest,omitempty"`
+	Image   string               `json:"image"`
+	PushId  int                  `json:"push_id"`
+	Options *NotificationOptions `json:"options,omitempty"`
 }
 
 type NotificationOptions struct {
-	Priority         string
-	DelayWhileIdle   *bool
-	TTL              *int
+	Priority         string              `json:"priority"`
+	DelayWhileIdle   *bool               `json:"delay_while_idel"`
+	TTL              *int                `json:"ttl"`
 	OnReceiptHandler *func(token string) //only take effect when you send to certain device
 }
 
@@ -200,7 +201,7 @@ func NewNotificationDefaultOptions() *NotificationOptions {
 	return &NotificationOptions{
 		Priority:         HIGH_PRIORITY,
 		DelayWhileIdle:   &false_addr,
-		TTL:              new(int),
+		TTL:              &default_ttl,
 		OnReceiptHandler: nil,
 	}
 }
@@ -210,7 +211,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 		To:         device.Token,
 		MessageId:  msg_id,
 		Priority:   gcm.HighPriority,
-		TimeToLive: new(int),
+		TimeToLive: &default_ttl,
 		Data: gcm.Data{
 			"type":   CONFIRM_TYPE,
 			"status": REGISTER_SUCCESS,
@@ -242,7 +243,7 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 		MessageId:      msg_id,
 		Priority:       HIGH_PRIORITY,
 		DelayWhileIdle: &false_addr,
-		TimeToLive:     new(int),
+		TimeToLive:     &default_ttl,
 		Data: gcm.Data{
 			"type": REREGISTER_TYPE,
 		},
