@@ -12,7 +12,9 @@ import (
 	"github.com/alecthomas/log4go"
 )
 
-const ()
+const (
+	BROADCASE_TOPIC = "com.upeninsula.banews"
+)
 
 var (
 	appServer  *fcm.AppServer
@@ -68,7 +70,6 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 }
 
 func broadcast(w http.ResponseWriter, r *http.Request) {
-	log4go.Global.Info("[BROADCAST]")
 	notification := &fcm.Notification{}
 
 	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
@@ -77,6 +78,7 @@ func broadcast(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	log4go.Global.Info("[BROADCAST][%v]", notification)
 
 	if notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
 		json.NewEncoder(w).Encode(map[string]string{
