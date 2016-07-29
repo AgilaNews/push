@@ -58,6 +58,7 @@ type HttpMessage struct {
 
 type XmppMessage struct {
 	To                       string        `json:"to,omitempty"`
+	Condition                string        `json:"condition,omitempty"`
 	MessageId                string        `json:"message_id"`
 	MessageType              string        `json:"message_type,omitempty"`
 	CollapseKey              string        `json:"collapse_key,omitempty"`

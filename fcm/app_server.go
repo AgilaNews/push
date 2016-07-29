@@ -253,12 +253,18 @@ func (appServer *AppServer) BroadcastReset(topic string) error {
 	return nil
 }
 
-func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) error {
+func (appServer *AppServer) BroadcastNotificationToMutliTopic(condition string, notification *Notification) {
+	msg := getXmppMessageFromNotification(notification)
+	msg.Condition = condition
+
+	go appServer.client.Send(*msg)
+}
+
+func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) {
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = fmt.Sprintf("/topics/%s", topic)
 
 	go appServer.client.Send(*msg)
-	return nil
 }
 
 func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {

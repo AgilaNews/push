@@ -12,9 +12,7 @@ import (
 	"github.com/alecthomas/log4go"
 )
 
-const (
-	BROADCASE_TOPIC = "com.upeninsula.banews"
-)
+const ()
 
 var (
 	appServer  *fcm.AppServer
@@ -90,8 +88,9 @@ func broadcast(w http.ResponseWriter, r *http.Request) {
 	if notification.Options == nil {
 		notification.Options = fcm.NewNotificationDefaultOptions()
 	}
+
 	go func() {
-		appServer.BroadcastNotificationToTopic(BROADCASE_TOPIC, notification)
+		appServer.BroadcastNotificationToMutliTopic("'android_' in topics", notification)
 	}()
 
 	json.NewEncoder(w).Encode(map[string]string{
@@ -102,7 +101,7 @@ func broadcast(w http.ResponseWriter, r *http.Request) {
 func reset(w http.ResponseWriter, r *http.Request) {
 	log4go.Global.Info("[RESET]")
 	go func() {
-		appServer.BroadcastReset(BROADCASE_TOPIC)
+		//		appServer.BroadcastReset()
 	}()
 	json.NewEncoder(w).Encode(map[string]string{
 		"error": "ok",
