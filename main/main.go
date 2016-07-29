@@ -70,29 +70,45 @@ func sendall(w http.ResponseWriter, r *http.Request) {
 }
 
 func broadcast(w http.ResponseWriter, r *http.Request) {
-	notification := &fcm.Notification{}
+	req := struct {
+		To           *string           `json:"to,omitempty"`
+		Condition    *string           `json:"condition,omitempty"`
+		Notification *fcm.Notification `json:"notification,omitempty"`
+	}{}
 
-	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": fmt.Sprintf("%v", err),
 		})
 		return
 	}
-	log4go.Global.Info("[BROADCAST][%v]", notification)
+	log4go.Global.Info("[BROADCAST][%v]", req)
 
-	if notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
+	if req.Notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": "only support tpl 2",
 		})
 		return
 	}
 
-	if notification.Options == nil {
-		notification.Options = fcm.NewNotificationDefaultOptions()
+	if (req.To == nil && req.Condition == nil) ||
+		(req.To != nil && req.Condition != nil) {
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "you can only set to or condtion",
+		})
+	}
+
+	if req.Notification.Options == nil {
+		req.Notification.Options = fcm.NewNotificationDefaultOptions()
 	}
 
 	go func() {
-		appServer.BroadcastNotificationToMutliTopic("'android_' in topics", notification)
+		if req.Condition != nil {
+			appServer.BroadcastNotificationToMutliTopic(*req.Condition, req.Notification)
+		} else {
+			appServer.BroadcastNotificationToTopic(*req.To, req.Notification)
+		}
+
 	}()
 
 	json.NewEncoder(w).Encode(map[string]string{
