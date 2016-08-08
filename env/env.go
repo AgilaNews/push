@@ -6,8 +6,21 @@ import (
 	"fmt"
 	"os"
 
+	"database/sql"
 	"github.com/alecthomas/log4go"
+	"github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 )
+
+type MysqlConfiguration struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	DB       string `json:"db"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Charset  string `json:"charset"`
+	PoolSize int    `json:"pool"`
+}
 
 type Configuration struct {
 	Log struct {
@@ -25,18 +38,51 @@ type Configuration struct {
 	HttpServer struct {
 		Addr string `json:"addr"`
 	} `json:"http_server"`
+	Mysql struct {
+		Read  MysqlConfiguration `json:"read"`
+		Write MysqlConfiguration `json:"write"`
+	} `json:"mysql"`
 }
 
 var (
 	DeviceMapper devicemapper.DeviceMapper
 	Config       *Configuration
-
-	level_map = map[string]log4go.Level{
+	level_map    = map[string]log4go.Level{
 		"DEBUG": log4go.DEBUG,
 		"INFO":  log4go.INFO,
 		"ERROR": log4go.ERROR,
 	}
+	//	Local *time.Location
+	Rdb *sql.DB
+	Wdb *sql.DB
 )
+
+func (mysqlConfig *MysqlConfiguration) getConnection() (*sql.DB, error) {
+	config := mysql.Config{
+		User:   mysqlConfig.User,
+		Passwd: mysqlConfig.Password,
+		Net:    "tcp",
+		Addr:   fmt.Sprintf("%s:%s", mysqlConfig.Host, mysqlConfig.Port),
+		DBName: mysqlConfig.DB,
+		Params: map[string]string{
+			"charset": "utf8mb4,utf8",
+		},
+		Collation: "utf8_general_ci",
+	}
+
+	db, err := sql.Open("mysql", config.FormatDSN())
+
+	if err != nil {
+		return nil, err
+	}
+
+	if mysqlConfig.PoolSize > 0 {
+		db.SetMaxIdleConns(mysqlConfig.PoolSize)
+		db.SetMaxOpenConns(mysqlConfig.PoolSize)
+	}
+
+	return db, nil
+}
 
 func Init() error {
 	value := os.Getenv("RUN_ENV")
@@ -63,6 +109,7 @@ func Init() error {
 		return err
 	}
 
+	//init log
 	var level log4go.Level
 	var ok bool
 	if level, ok = level_map[Config.Log.Level]; !ok {
@@ -72,11 +119,22 @@ func Init() error {
 	if Config.Log.Console {
 		log4go.Global.AddFilter("stdout", level, log4go.NewConsoleLogWriter())
 	}
-
 	log4go.Global.AddFilter("log", level, log4go.NewFileLogWriter(Config.Log.Path, false))
 
+	// init device mapper
+	// use full when you want to push to certain device
 	if DeviceMapper, err = devicemapper.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
 		log4go.Global.Info("init device mapper fail")
+		return err
+	}
+
+	//init mysql
+	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
+		log4go.Global.Error("init read db error")
+		return err
+	}
+	if Wdb, err = Config.Mysql.Write.getConnection(); err != nil {
+		log4go.Global.Error("init write db error")
 		return err
 	}
 
