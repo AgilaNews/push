@@ -5,6 +5,7 @@ import (
 	"fcm/devicemapper"
 	"fmt"
 	"os"
+	"time"
 
 	"database/sql"
 	"github.com/alecthomas/log4go"
@@ -42,6 +43,7 @@ type Configuration struct {
 		Read  MysqlConfiguration `json:"read"`
 		Write MysqlConfiguration `json:"write"`
 	} `json:"mysql"`
+	Location string `json:"location"`
 }
 
 var (
@@ -52,9 +54,10 @@ var (
 		"INFO":  log4go.INFO,
 		"ERROR": log4go.ERROR,
 	}
-	//	Local *time.Location
-	Rdb *sql.DB
-	Wdb *sql.DB
+
+	Rdb      *sql.DB
+	Wdb      *sql.DB
+	Location *time.Location
 )
 
 func (mysqlConfig *MysqlConfiguration) getConnection() (*sql.DB, error) {
@@ -128,6 +131,13 @@ func Init() error {
 		return err
 	}
 
+	if Config.Location == "" {
+		Location, err = time.LoadLocation(Config.Location)
+		if err != nil {
+			log4go.Global.Error("load location %v error", Config.Location)
+			return err
+		}
+	}
 	//init mysql
 	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
 		log4go.Global.Error("init read db error")
