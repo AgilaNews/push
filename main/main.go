@@ -1,200 +1,78 @@
 package main
 
 import (
-	"fcm/env"
-
-	"encoding/json"
-	"fcm/fcm"
 	"fmt"
-	"net/http"
 	"os"
+	"os/signal"
+	"push/env"
+	"push/fcm"
+	"push/task"
+	"sync"
+	"time"
 
 	"github.com/alecthomas/log4go"
 )
 
-const (
-	BROADCASE_TOPIC = "com.upeninsula.banews"
-)
-
-var (
-	appServer  *fcm.AppServer
-	true_addr  = true
-	false_addr = false
-)
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func listClients(w http.ResponseWriter, r *http.Request) {
-	devices, _ := env.DeviceMapper.GetAllDevice()
-
-	json.NewEncoder(w).Encode(devices)
-}
-
-func sendall(w http.ResponseWriter, r *http.Request) {
-	notification := &fcm.Notification{}
-	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("%v", err),
-		})
-		return
-	}
-
-	if notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "only support tpl 2",
-		})
-		return
-	}
-
-	if notification.Options == nil {
-		notification.Options = fcm.NewNotificationDefaultOptions()
-	}
-	go func() {
-		devices, err := env.DeviceMapper.GetAllDevice()
-		log4go.Global.Info("[SNDALL][%v]", len(devices))
-		if err == nil {
-			for _, device := range devices {
-				appServer.PushNotificationToDevice(device, notification)
-			}
-		}
-	}()
-
-	json.NewEncoder(w).Encode(map[string]string{
-		"error": "ok",
-	})
-}
-
-func broadcast(w http.ResponseWriter, r *http.Request) {
-	req := struct {
-		To           *string           `json:"to,omitempty"`
-		Condition    *string           `json:"condition,omitempty"`
-		Notification *fcm.Notification `json:"notification,omitempty"`
-	}{}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("%v", err),
-		})
-		return
-	}
-	log4go.Global.Info("[BROADCAST][%v]", req)
-
-	if req.Notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "only support tpl 2",
-		})
-		return
-	}
-
-	if (req.To == nil && req.Condition == nil) ||
-		(req.To != nil && req.Condition != nil) {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "you can only set to or condtion",
-		})
-	}
-
-	if req.Notification.Options == nil {
-		req.Notification.Options = fcm.NewNotificationDefaultOptions()
-	}
-
-	go func() {
-		if req.Condition != nil {
-			appServer.BroadcastNotificationToMutliTopic(*req.Condition, req.Notification)
-		} else {
-			appServer.BroadcastNotificationToTopic(*req.To, req.Notification)
-		}
-
-	}()
-
-	json.NewEncoder(w).Encode(map[string]string{
-		"error": "ok",
-	})
-}
-
-func reset(w http.ResponseWriter, r *http.Request) {
-	log4go.Global.Info("[RESET]")
-	go func() {
-		//		appServer.BroadcastReset()
-	}()
-	json.NewEncoder(w).Encode(map[string]string{
-		"error": "ok",
-	})
-}
-
-func sendToDevices(w http.ResponseWriter, r *http.Request) {
-	req := struct {
-		To           string           `json:"to"`
-		Notification fcm.Notification `json:"notification"`
-	}{}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("%v", err),
-		})
-		return
-	}
-
-	if req.Notification.Tpl != fcm.TPL_IMAGE_WITH_TEXT {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "only support tpl 2",
-		})
-		return
-	}
-	if req.Notification.Options == nil {
-		req.Notification.Options = fcm.NewNotificationDefaultOptions()
-	}
-
-	if device, err := env.DeviceMapper.GetDeviceById(req.To); err != nil || device == nil {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "device not found",
-		})
-		return
-	} else {
-		go func() {
-			log4go.Global.Info("[SINGLECAST][%v]", device.DeviceId)
-			appServer.PushNotificationToDevice(device, &req.Notification)
-		}()
-	}
-
-	json.NewEncoder(w).Encode(map[string]string{
-		"error": "ok",
-	})
-}
-
-func getNewsDetail(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func main() {
-	fmt.Printf("starts")
 	var err error
 
 	if err = env.Init(); err != nil {
-		fmt.Printf("init error: %v\n", err)
+		fmt.Println("init error : %v\n", err)
 		os.Exit(-1)
 	}
 
-	appServer, err = fcm.NewAppServer(env.Config.AppServer.SenderId, env.Config.AppServer.SecurityKey)
-	if err != nil {
-		log4go.Global.Error("init app server error")
-		os.Exit(-1)
-	} else {
-		go appServer.Work()
+	var wg sync.WaitGroup
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+
+	wg.Add(2)
+	go func() {
+		fcm.GlobalAppServer.Work()
+		log4go.Info("app server exists")
+		wg.Done()
+	}()
+
+	go func() {
+		task.GlobalTaskManager.Run()
+		log4go.Info("task manager done")
+		wg.Done()
+	}()
+
+	done := make(chan bool)
+	go func() {
+		wg.Wait()
+
+		done <- true
+	}()
+
+	//TODO test
+	notification := &fcm.Notification{
+		Tpl:     "2",
+		NewsId:  "quz2RgKCIpY=",
+		Title:   "Pinoy students win 5 medals in Romania math contest",
+		Digest:  "Agila",
+		Image:   "",
+		Options: fcm.NewNotificationDefaultOptions(),
 	}
 
-	http.HandleFunc("/clients", listClients)
-	http.HandleFunc("/broadcast", broadcast)
-	http.HandleFunc("/send_all_device", sendall)
-	http.HandleFunc("/reset", reset)
-	http.HandleFunc("/send_to_deviceid", sendToDevices)
-	http.HandleFunc("/news", getNewsDetail)
-
-	if err = http.ListenAndServe(env.Config.HttpServer.Addr, nil); err != nil {
-		log4go.Global.Error("listen on http server error")
+	t := time.Now().Add(time.Second * 5)
+	if err = fcm.GlobalPushManager.AddNotificationTask(t, fcm.PUSH_ALL, notification); err != nil {
+		log4go.Warn("add notify error : %v", err)
 	}
+
+OUTFOR:
+	for {
+		select {
+		case <-sigs:
+			task.GlobalTaskManager.Stop()
+			fcm.GlobalAppServer.Stop()
+			log4go.Info("get interrupt, gracefull stop")
+		case <-done:
+			log4go.Info("all routine done, exit")
+			break OUTFOR
+		}
+	}
+
+	log4go.Global.Close()
 }

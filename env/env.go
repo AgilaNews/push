@@ -2,9 +2,11 @@ package env
 
 import (
 	"encoding/json"
-	"fcm/devicemapper"
 	"fmt"
 	"os"
+	"push/device"
+	"push/fcm"
+	"push/task"
 	"time"
 
 	"database/sql"
@@ -47,16 +49,14 @@ type Configuration struct {
 }
 
 var (
-	DeviceMapper devicemapper.DeviceMapper
-	Config       *Configuration
-	level_map    = map[string]log4go.Level{
+	Wdb       *sql.DB
+	Rdb       *sql.DB
+	Config    *Configuration
+	level_map = map[string]log4go.Level{
 		"DEBUG": log4go.DEBUG,
 		"INFO":  log4go.INFO,
 		"ERROR": log4go.ERROR,
 	}
-
-	Rdb      *sql.DB
-	Wdb      *sql.DB
 	Location *time.Location
 )
 
@@ -65,7 +65,7 @@ func (mysqlConfig *MysqlConfiguration) getConnection() (*sql.DB, error) {
 		User:   mysqlConfig.User,
 		Passwd: mysqlConfig.Password,
 		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%s", mysqlConfig.Host, mysqlConfig.Port),
+		Addr:   fmt.Sprintf("%s:%d", mysqlConfig.Host, mysqlConfig.Port),
 		DBName: mysqlConfig.DB,
 		Params: map[string]string{
 			"charset": "utf8mb4,utf8",
@@ -82,6 +82,12 @@ func (mysqlConfig *MysqlConfiguration) getConnection() (*sql.DB, error) {
 	if mysqlConfig.PoolSize > 0 {
 		db.SetMaxIdleConns(mysqlConfig.PoolSize)
 		db.SetMaxOpenConns(mysqlConfig.PoolSize)
+	}
+
+	err = db.Ping()
+
+	if err != nil {
+		return nil, err
 	}
 
 	return db, nil
@@ -126,7 +132,7 @@ func Init() error {
 
 	// init device mapper
 	// use full when you want to push to certain device
-	if DeviceMapper, err = devicemapper.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
+	if device.GlobalDeviceMapper, err = device.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
 		log4go.Global.Info("init device mapper fail")
 		return err
 	}
@@ -138,6 +144,7 @@ func Init() error {
 			return err
 		}
 	}
+
 	//init mysql
 	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
 		log4go.Global.Error("init read db error")
@@ -145,6 +152,21 @@ func Init() error {
 	}
 	if Wdb, err = Config.Mysql.Write.getConnection(); err != nil {
 		log4go.Global.Error("init write db error")
+		return err
+	}
+
+	if task.GlobalTaskManager, err = task.NewTaskManager(Rdb, Wdb); err != nil {
+		log4go.Global.Error("new task manager")
+		return err
+	}
+
+	if fcm.GlobalAppServer, err = fcm.NewAppServer(Config.AppServer.SenderId, Config.AppServer.SecurityKey); err != nil {
+		log4go.Global.Error("new app server")
+		return err
+	}
+
+	if fcm.GlobalPushManager, err = fcm.NewPushManager(task.GlobalTaskManager, Rdb, Wdb); err != nil {
+		log4go.Global.Error("new push manager error")
 		return err
 	}
 

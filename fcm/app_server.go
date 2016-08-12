@@ -1,10 +1,9 @@
 package fcm
 
 import (
-	"fcm/devicemapper"
-	"fcm/env"
-	"fcm/gcm"
 	"fmt"
+	"push/device"
+	"push/gcm"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +32,8 @@ var (
 	true_addr   = true
 	false_addr  = false
 	default_ttl = 14400
+
+	GlobalAppServer *AppServer
 )
 
 type AppServer struct {
@@ -44,23 +45,6 @@ type AppServer struct {
 	client *gcm.XmppGcmClient
 }
 
-type Notification struct {
-	Tpl     string               `json:"tpl"`
-	NewsId  string               `json:"news_id"`
-	Title   string               `json:"title"`
-	Digest  string               `json:"digest,omitempty"`
-	Image   string               `json:"image"`
-	PushId  int                  `json:"push_id"`
-	Options *NotificationOptions `json:"options,omitempty"`
-}
-
-type NotificationOptions struct {
-	Priority         string              `json:"priority"`
-	DelayWhileIdle   *bool               `json:"delay_while_idel"`
-	TTL              *int                `json:"ttl"`
-	OnReceiptHandler *func(token string) //only take effect when you send to certain device
-}
-
 func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
 	log4go.Global.Info("[OnAck][%s]", msg.MessageId)
 }
@@ -68,10 +52,10 @@ func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
 func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 	log4go.Global.Info("onNAck %v:%v", msg.MessageId, msg.Error)
 	if msg.Error == "DEVICE_UNREGISTERED" {
-		if device, err := env.DeviceMapper.GetDeviceByToken(msg.From); err == nil {
-			if device != nil {
-				log4go.Global.Info("[UNREG][%v]", device.DeviceId)
-				env.DeviceMapper.RemoveDevice(device)
+		if d, err := device.GlobalDeviceMapper.GetDeviceByToken(msg.From); err == nil {
+			if d != nil {
+				log4go.Global.Info("[UNREG][%v]", d.DeviceId)
+				device.GlobalDeviceMapper.RemoveDevice(d)
 			}
 		}
 	}
@@ -81,9 +65,9 @@ func (appServer *AppServer) onReceipt(msg *gcm.CcsMessage) {
 	if msg.Data["message_status"] == "MESSAGE_SENT_TO_DEVICE" {
 		t, _ := strconv.ParseInt(msg.Data["message_sent_timestamp"].(string), 10, 64)
 		at := time.Unix(t/1000, (t%1000)*1000).String()
-		if device, err := env.DeviceMapper.GetDeviceByToken(msg.Data["device_registration_id"].(string)); err == nil {
-			if device != nil {
-				log4go.Global.Info("[RECEIVED][%v][%s][AT:%s]", device.DeviceId, msg.MessageId, at)
+		if d, err := device.GlobalDeviceMapper.GetDeviceByToken(msg.Data["device_registration_id"].(string)); err == nil {
+			if d != nil {
+				log4go.Global.Info("[RECEIVED][%v][%s][AT:%s]", d.DeviceId, msg.MessageId, at)
 			} else {
 				log4go.Global.Info("[RECEIVED][UNSEEN][%s][at%s]", msg.MessageId, at)
 			}
@@ -116,16 +100,16 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 			client_version = client_version[1:]
 		}
 
-		if device, err := env.DeviceMapper.GetDeviceById(device_id); err != nil {
+		if d, err := device.GlobalDeviceMapper.GetDeviceById(device_id); err != nil {
 			log4go.Global.Warn("get device error: %v", err)
 			return
 		} else {
-			if device != nil && device.Token != token {
-				log4go.Global.Info("[REM][%v]", device.DeviceId)
-				env.DeviceMapper.RemoveDevice(device)
+			if d != nil && d.Token != token {
+				log4go.Global.Info("[REM][%v]", d.DeviceId)
+				device.GlobalDeviceMapper.RemoveDevice(d)
 			}
 
-			device = &devicemapper.Device{
+			d = &device.Device{
 				Token:         token,
 				DeviceId:      device_id,
 				ClientVersion: client_version,
@@ -134,9 +118,9 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 				OsVersion:     os_version,
 				Vendor:        vendor,
 			}
-			log4go.Global.Info("[NEW][%v]", device.DeviceId)
-			env.DeviceMapper.AddNewDevice(device)
-			appServer.ConfirmRegistration(device, msg.MessageId)
+			log4go.Global.Info("[NEW][%v]", d.DeviceId)
+			device.GlobalDeviceMapper.AddNewDevice(d)
+			appServer.ConfirmRegistration(d, msg.MessageId)
 		}
 
 	case UPSTREAM_UNREGISTER:
@@ -144,12 +128,12 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 		if !ok {
 			return
 		}
-		if device, err := env.DeviceMapper.GetDeviceById(device_id); err != nil {
+		if d, err := device.GlobalDeviceMapper.GetDeviceById(device_id); err != nil {
 			log4go.Global.Warn("get device error: %v", err)
 			return
 		} else {
-			if device != nil {
-				env.DeviceMapper.RemoveDevice(device)
+			if d != nil {
+				device.GlobalDeviceMapper.RemoveDevice(d)
 			}
 			log4go.Global.Info("[UNREG_UNSEEN][%v]", device_id)
 
@@ -160,8 +144,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 }
 
 func NewAppServer(sender_id, sk string) (*AppServer, error) {
-	gc, err := gcm.NewXmppGcmClient(env.Config.AppServer.SenderId,
-		env.Config.AppServer.SecurityKey)
+	gc, err := gcm.NewXmppGcmClient(sender_id, sk)
 	if err != nil {
 		return nil, err
 	}
@@ -176,12 +159,14 @@ func NewAppServer(sender_id, sk string) (*AppServer, error) {
 }
 
 func (appServer *AppServer) Stop() {
+	appServer.client.Close()
 	appServer.stop <- true
 }
 
 func (appServer *AppServer) Work() {
 	log4go.Global.Info("app server starts")
 
+OUTFOR:
 	for {
 		if err := appServer.client.Listen(gcm.MessageHandler{
 			OnAck:       appServer.onAck,
@@ -193,8 +178,16 @@ func (appServer *AppServer) Work() {
 			log4go.Global.Warn("listen to gcm error: %v", err)
 		}
 
+		select {
+		case <-appServer.stop:
+			log4go.Global.Info("appserver exits")
+			break OUTFOR
+		default:
+		}
+
 		log4go.Global.Info("reconnect")
 	}
+
 }
 
 func NewNotificationDefaultOptions() *NotificationOptions {
@@ -206,7 +199,7 @@ func NewNotificationDefaultOptions() *NotificationOptions {
 	}
 }
 
-func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg_id string) {
+func (appServer *AppServer) ConfirmRegistration(device *device.Device, msg_id string) {
 	confirm := &gcm.XmppMessage{
 		To:         device.Token,
 		MessageId:  msg_id,
@@ -222,7 +215,7 @@ func (appServer *AppServer) ConfirmRegistration(device *devicemapper.Device, msg
 	log4go.Global.Info("[CONFIRMED][%v]", device.DeviceId)
 }
 
-func (appServer *AppServer) PushNotificationToDevice(dev *devicemapper.Device, notification *Notification) error {
+func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notification *Notification) error {
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = dev.Token
 

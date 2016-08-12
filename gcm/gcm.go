@@ -189,6 +189,7 @@ type XmppGcmClient struct {
 	}
 	senderID string
 	apiKey   string
+	closed   bool
 }
 
 type messageLogEntry struct {
@@ -213,16 +214,28 @@ func NewXmppGcmClient(senderID string, apiKey string) (*XmppGcmClient, error) {
 		},
 		senderID: senderID,
 		apiKey:   apiKey,
+		closed:   true,
 	}
 	xc.messages.Cond = sync.NewCond(&xc.messages.Lock)
 	return xc, nil
 }
 
+func (c *XmppGcmClient) Close() {
+	c.closed = true
+	c.XmppClient.Close()
+}
+
 func (c *XmppGcmClient) Listen(h MessageHandler) error {
+	c.closed = false
+
 	for {
 		stanza, err := c.XmppClient.Recv()
 		if err != nil {
 			log4go.Warn("error on Recv>%v", err)
+
+			if c.closed {
+				return nil
+			}
 
 			//reconnect
 			for {

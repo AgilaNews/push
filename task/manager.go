@@ -65,12 +65,16 @@ type TaskManager struct {
 	stop chan bool
 	wake chan bool
 
-	Rdb *sql.DB
-	Wdb *sql.DB
+	wdb *sql.DB
+	rdb *sql.DB
 }
 
 type TaskHandler func(identifier string, context interface{}) error
 type PriorityQueue []*Task
+
+var (
+	GlobalTaskManager *TaskManager
+)
 
 func NewTaskManager(rdb, wdb *sql.DB) (*TaskManager, error) {
 	m := &TaskManager{
@@ -89,8 +93,8 @@ func NewTaskManager(rdb, wdb *sql.DB) (*TaskManager, error) {
 
 		stop: make(chan bool),
 		wake: make(chan bool),
-		Rdb:  rdb,
-		Wdb:  wdb,
+		wdb:  wdb,
+		rdb:  rdb,
 	}
 
 	heap.Init(&m.PendingQueue.inner)
@@ -197,7 +201,7 @@ func NewOneshotTask(at time.Time,
 		Retry:             retry,
 		RetryInterval:     retryInterval,
 		Handler:           handler,
-		LastExecutionTime: time.Unix(0, 0),
+		LastExecutionTime: time.Time{},
 		CreateTime:        time.Now(),
 		UpdateTime:        time.Now(),
 	}
@@ -209,12 +213,12 @@ func (taskManager *TaskManager) AddTask(task *Task) error {
 		return fmt.Errorf("can't add task than now: %v < %v", task.NextExecutionTime, now)
 	}
 
-	if err := taskManager.internalAddTask(task); err != nil {
-		return fmt.Errorf("add internal task error: %v", err)
-	}
-
 	if err := taskManager.saveTaskToDB(task); err != nil {
 		return fmt.Errorf("save task to db error : %v", err)
+	}
+
+	if err := taskManager.internalAddTask(task); err != nil {
+		return fmt.Errorf("add internal task error: %v", err)
 	}
 
 	taskManager.PendingQueue.Lock()
@@ -293,8 +297,8 @@ func (taskManager *TaskManager) Run() {
 			return
 		case <-time.After(duration):
 			tasks := taskManager.popAvaliableTasks(now)
-			log4go.Global.Debug("run tasks [%d]", len(tasks))
 			if len(tasks) > 0 {
+				log4go.Global.Debug("run tasks [%d]", len(tasks))
 				go taskManager.runTasks(tasks)
 			}
 		case <-taskManager.wake:
@@ -315,7 +319,7 @@ func (*TaskManager) syncTask() error {
 func (taskManager *TaskManager) updateTaskStatus(task *Task, status int) error {
 	log4go.Info("update task [%v] status [%v] ", task.UserIdentifier, status)
 
-	if _, err := taskManager.Wdb.Exec("UPDATE tb_task SET status=?", status); err != nil {
+	if _, err := taskManager.wdb.Exec("UPDATE tb_task SET status=?", status); err != nil {
 		return fmt.Errorf("update taks error : %v", status)
 	}
 
@@ -323,7 +327,7 @@ func (taskManager *TaskManager) updateTaskStatus(task *Task, status int) error {
 }
 
 func (taskManager *TaskManager) saveTaskLog(tasklog *TaskLog) {
-	_, err := taskManager.Wdb.Exec("INSERT INTO tb_task_log(`task_id`, `status`, `start_time`, `end_time`)"+
+	_, err := taskManager.wdb.Exec("INSERT INTO tb_task_log(`task_id`, `status`, `start_time`, `end_time`)"+
 		"VALUES(?,?,?,?)",
 		tasklog.TaskId,
 		tasklog.Status,
@@ -347,9 +351,9 @@ func (taskManager *TaskManager) saveTaskToDB(task *Task) error {
 		}
 	}
 
-	result, err := taskManager.Wdb.Exec("INSERT INTO tb_task (`identifier`, `type`, `task_type`,"+
-		"`source`, `period`, `context`, `last_execution_time`, `next_execution_time`, "+
-		"`create_time`, `update_time`) VALUES(?,?,?,?,?,?,?,?,?,?)",
+	result, err := taskManager.wdb.Exec("INSERT INTO tb_task (`identifier`, `type`, `task_type`,"+
+		"`period`, `context`, `last_execution_time`, `next_execution_time`, "+
+		"`create_time`, `update_time`, `status`) VALUES(?,?,?,?,?,?,?,?,?,?)",
 		task.UserIdentifier,
 		task.Type,
 		task.TaskSource,

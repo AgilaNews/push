@@ -20,7 +20,7 @@
                 "port": 3306,
                 "db": "banews",
                 "user": "root",
-                "password": "MhxzKhl-Happy",
+                "password": "MhxzKhl-Happy!@#",
                 "pool": 30
                 },              
         "write": {
@@ -28,7 +28,7 @@
                 "port": 3306,   
                 "db": "banews",
                 "user": "root",
-                "password": "MhxzKhl-Happy",
+                "password": "MhxzKhl-Happy!@#",
                 "pool": 10
                 }
     }
