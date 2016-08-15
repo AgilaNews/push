@@ -3,14 +3,14 @@ package fcm
 import (
 	"time"
 
-	"database/sql"
 	"encoding/json"
-	"github.com/mcuadros/go-version"
+	//	"github.com/mcuadros/go-version"
 	"push/task"
 	"strconv"
-	"sync"
 
 	"github.com/alecthomas/log4go"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
 const (
@@ -33,6 +33,34 @@ const (
 
 type ClientVersion string
 
+type PushContition struct {
+	MinVersion    string `json:"min_version"`
+	OS            string `json:"os"`
+	LocalTimeZone string `json:"local_time_zone"`
+}
+
+type PushModel struct {
+	gorm.Model
+
+	Tpl       string               `gorm:"column:tpl;type:varchar(32)"`
+	NewsId    string               `gorm:"column:news_id;type:varchar(32)";index`
+	Title     string               `gorm:"column:title;type:varchar(256)"`
+	Digest    string               `gorm:"column:digest;type:varchar(128)"`
+	Image     string               `gorm:"column:image;type:varchar(1024);"`
+	Options   *NotificationOptions `gorm:"-"`
+	OptionStr string               `gorm:"column:option'type:varchar(1024);"`
+
+	// internal use
+	Condition    *PushContition `gorm:"-"`
+	ConditionStr string         `gorm:"column:condition"`
+
+	PlanTime    time.Time `gorm:"column:plan_time"`
+	DeliverTime time.Time `gorm:"column:delivery_time"`
+	DeliverType int       `gorm:"column:delivery_type;type:int(11)"`
+	Status      int       `gorm:"column:status;type:tinyint(4)";index`
+}
+
+//this type is sent to FCM server
 type Notification struct {
 	Tpl     string               `json:"tpl"`
 	NewsId  string               `json:"news_id"`
@@ -41,18 +69,6 @@ type Notification struct {
 	Image   string               `json:"image"`
 	Options *NotificationOptions `json:"options,omitempty"`
 	PushId  int                  `json:"push_id"`
-
-	// internal use
-	Condition struct {
-		MinVersion    string `json:"min_version"`
-		OS            string `json:"os"`
-		LocalTimeZone string `json:"local_time_zone"`
-	} `json:"-"`
-
-	PlanTime    time.Time `json:"-"`
-	DeliverTime time.Time `json:"-"`
-	PushType    int       `json:"-"`
-	DeliverType int       `json:"-"`
 }
 
 type NotificationOptions struct {
@@ -63,54 +79,77 @@ type NotificationOptions struct {
 }
 
 type PushManager struct {
-	wdb *sql.DB
-	rdb *sql.DB
-
-	PushMap struct {
-		sync.Mutex
-		inner map[string]*Notification
-	}
+	wdb *gorm.DB
+	rdb *gorm.DB
 }
 
 var (
 	GlobalPushManager *PushManager
 )
 
-func (pushManager *PushManager) PushTaskHandler(push_id_str string, context interface{}) error {
-	notification := context.(*Notification)
+func (PushModel) TableName() string {
+	return "tb_push"
+}
 
-	if notification.PushType == PUSH_ALL {
+func (p *PushModel) getNotification() *Notification {
+	return &Notification{
+		PushId:  int(p.ID),
+		Tpl:     p.Tpl,
+		NewsId:  p.NewsId,
+		Title:   p.Title,
+		Digest:  p.Digest,
+		Image:   p.Image,
+		Options: p.Options,
+	}
+}
+
+func (n *Notification) getPushModel() *PushModel {
+	return &PushModel{
+		Tpl:     n.Tpl,
+		NewsId:  n.NewsId,
+		Title:   n.Title,
+		Digest:  n.Digest,
+		Image:   n.Image,
+		Options: n.Options,
+		Status:  STATUS_INIT,
+	}
+}
+
+func (pushManager *PushManager) PushTaskHandler(push_id_str string, context interface{}) error {
+	push := context.(*PushModel)
+	log4go.Info("handle push task at [%v] of push [%v]", time.Now(), push_id_str)
+
+	if push.DeliverType == PUSH_ALL {
+		notification := push.getNotification()
 		GlobalAppServer.BroadcastNotificationToTopic(BROAD_BROADCAST, notification)
 	}
 
 	return nil
 }
 
-func NewPushManager(taskManager *task.TaskManager, wdb, rdb *sql.DB) (*PushManager, error) {
+func NewPushManager(taskManager *task.TaskManager, wdb, rdb *gorm.DB) (*PushManager, error) {
 	manager := &PushManager{
 		wdb: wdb,
 		rdb: rdb,
-
-		PushMap: struct {
-			sync.Mutex
-			inner map[string]*Notification
-		}{
-			inner: make(map[string]*Notification),
-		},
 	}
 
 	return manager, nil
 }
 
-func (p *PushManager) AddNotificationTask(at time.Time, push_type int, notification *Notification) error {
-	notification.PlanTime = at
-	notification.PushType = push_type
+func (p *PushManager) AddPushTask(at time.Time, deliver_type int, condition *PushContition, notification *Notification) error {
+	pushModel := notification.getPushModel()
+	pushModel.PlanTime = at
+	pushModel.DeliverType = deliver_type
+	if condition != nil {
+		tmp, _ := json.Marshal(condition)
+		pushModel.ConditionStr = string(tmp)
+	}
 
-	if err := p.saveNotificationToDB(notification); err != nil {
+	if err := p.wdb.Create(&pushModel).Error; err != nil {
 		return err
 	}
 
-	t := task.NewOneshotTask(at, strconv.Itoa(notification.PushId), task.TASK_SOURCE_PUSH, 0, 0, p.PushTaskHandler, notification)
+	t := task.GlobalTaskManager.NewOneshotTask(at, strconv.Itoa(int(pushModel.ID)), task.TASK_SOURCE_PUSH, 0, 0, pushModel)
 	if err := task.GlobalTaskManager.AddTask(t); err != nil {
 		return err
 	}
@@ -118,62 +157,32 @@ func (p *PushManager) AddNotificationTask(at time.Time, push_type int, notificat
 	return nil
 }
 
-func (pushManager *PushManager) saveNotificationToDB(notification *Notification) error {
-	so, _ := json.Marshal(notification.Options)
-	co, _ := json.Marshal(notification.Condition)
-	now := int(time.Now().Unix())
+func (p *PushManager) GetPush(id string) (*PushModel, error) {
+	pushModel := &PushModel{}
 
-	result, err := pushManager.wdb.Exec("INSERT INTO tb_push(`plan_time`, `deliver_time`, `deliver_type`, `push_condition`, `tpl`, "+
-		"`title`, `digest`, `news_id`, `image`, `options`, `status`, `create_time`, `update_time`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-		int(notification.PlanTime.Unix()),
-		int(notification.DeliverTime.Unix()),
-		notification.DeliverType,
-		co,
-		notification.Tpl,
-		notification.Title,
-		notification.Digest,
-		notification.NewsId,
-		notification.Image,
-		string(so),
-		STATUS_INIT,
-		now,
-		now,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	lid, _ := result.LastInsertId()
-	notification.PushId = int(lid)
-	log4go.Info("saved pushid is %d from %d", notification.PushId, lid)
-
-	return nil
-}
-
-func (pushManager *PushManager) getAllVersion() ([]*ClientVersion, error) {
-	rows, err := pushManager.rdb.Query("SELECT client_version FROM tb_version")
-	if err != nil {
+	if err := p.rdb.First(pushModel, id).Error; err != nil {
+		return pushModel, nil
+	} else {
 		return nil, err
 	}
-	defer rows.Close()
+}
 
-	cv := make([]string, 0)
-
-	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
-			return nil, err
-		}
-		cv = append(cv, c)
+func (p *PushManager) BatchGetPush(ids []string) ([]*PushModel, error) {
+	models := make([]*PushModel, 0)
+	if err := p.rdb.Find(&models, ids).Error; err != nil {
+		return nil, err
+	} else {
+		return models, nil
 	}
+}
 
-	version.Sort(cv)
+func (p *PushManager) GetPushs(page_number, page_size int) ([]*PushModel, error) {
+	models := make([]*PushModel, 0)
 
-	ret := make([]*ClientVersion, len(cv))
-	for idx, v := range cv {
-		c := ClientVersion(v)
-		ret[idx] = &c
+	off := page_number * page_size
+	if err := p.rdb.Find(&models).Offset(off).Limit(page_size).Error; err != nil {
+		return nil, err
+	} else {
+		return models, nil
 	}
-	return ret, nil
 }

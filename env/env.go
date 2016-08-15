@@ -9,10 +9,10 @@ import (
 	"push/task"
 	"time"
 
-	"database/sql"
 	"github.com/alecthomas/log4go"
-	"github.com/go-sql-driver/mysql"
-	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
 type MysqlConfiguration struct {
@@ -49,8 +49,8 @@ type Configuration struct {
 }
 
 var (
-	Wdb       *sql.DB
-	Rdb       *sql.DB
+	Wdb       *gorm.DB
+	Rdb       *gorm.DB
 	Config    *Configuration
 	level_map = map[string]log4go.Level{
 		"DEBUG": log4go.DEBUG,
@@ -60,31 +60,28 @@ var (
 	Location *time.Location
 )
 
-func (mysqlConfig *MysqlConfiguration) getConnection() (*sql.DB, error) {
-	config := mysql.Config{
-		User:   mysqlConfig.User,
-		Passwd: mysqlConfig.Password,
-		Net:    "tcp",
-		Addr:   fmt.Sprintf("%s:%d", mysqlConfig.Host, mysqlConfig.Port),
-		DBName: mysqlConfig.DB,
-		Params: map[string]string{
-			"charset": "utf8mb4,utf8",
-		},
-		Collation: "utf8_general_ci",
-	}
+func (mysqlConfig *MysqlConfiguration) getConnection() (*gorm.DB, error) {
+	connstr := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&collation=%s",
+		mysqlConfig.User,
+		mysqlConfig.Password,
+		mysqlConfig.Host,
+		mysqlConfig.Port,
+		mysqlConfig.DB,
+		"utf8mb4",
+		"utf8_general_ci",
+	)
 
-	db, err := sql.Open("mysql", config.FormatDSN())
-
+	db, err := gorm.Open("mysql", connstr)
 	if err != nil {
 		return nil, err
 	}
 
 	if mysqlConfig.PoolSize > 0 {
-		db.SetMaxIdleConns(mysqlConfig.PoolSize)
-		db.SetMaxOpenConns(mysqlConfig.PoolSize)
+		db.DB().SetMaxIdleConns(mysqlConfig.PoolSize)
+		db.DB().SetMaxOpenConns(mysqlConfig.PoolSize)
 	}
 
-	err = db.Ping()
+	err = db.DB().Ping()
 
 	if err != nil {
 		return nil, err
@@ -146,12 +143,14 @@ func Init() error {
 	}
 
 	//init mysql
-	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
-		log4go.Global.Error("init read db error")
-		return err
-	}
 	if Wdb, err = Config.Mysql.Write.getConnection(); err != nil {
 		log4go.Global.Error("init write db error")
+		return err
+	}
+
+	Wdb.AutoMigrate(&fcm.PushModel{}, &task.Task{})
+	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
+		log4go.Global.Error("init read db error")
 		return err
 	}
 
@@ -169,6 +168,8 @@ func Init() error {
 		log4go.Global.Error("new push manager error")
 		return err
 	}
+
+	task.GlobalTaskManager.RegisterTaskSourceHandler(task.TASK_SOURCE_PUSH, fcm.GlobalPushManager.PushTaskHandler)
 
 	log4go.Global.Info("env init success [%v]", value)
 	return nil

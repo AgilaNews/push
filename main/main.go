@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"push/env"
@@ -15,28 +17,41 @@ import (
 
 func main() {
 	var err error
+	var wg sync.WaitGroup
+	var listener *net.TCPListener
 
 	if err = env.Init(); err != nil {
 		fmt.Println("init error : %v\n", err)
 		os.Exit(-1)
 	}
 
-	var wg sync.WaitGroup
+	if listener, err = NewRestfulHandler(env.Config.HttpServer.Addr); err != nil {
+		fmt.Println("init resful : %v\n", err)
+		os.Exit(-1)
+	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
 
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
+		defer wg.Done()
 		fcm.GlobalAppServer.Work()
 		log4go.Info("app server exists")
-		wg.Done()
 	}()
 
 	go func() {
+		defer wg.Done()
 		task.GlobalTaskManager.Run()
 		log4go.Info("task manager done")
-		wg.Done()
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		log4go.Info("http starts at: %v", listener.Addr())
+		http.Serve(listener, nil)
+		log4go.Info("http server stoped")
 	}()
 
 	done := make(chan bool)
@@ -46,7 +61,6 @@ func main() {
 		done <- true
 	}()
 
-	//TODO test
 	notification := &fcm.Notification{
 		Tpl:     "2",
 		NewsId:  "quz2RgKCIpY=",
@@ -56,8 +70,8 @@ func main() {
 		Options: fcm.NewNotificationDefaultOptions(),
 	}
 
-	t := time.Now().Add(time.Second * 5)
-	if err = fcm.GlobalPushManager.AddNotificationTask(t, fcm.PUSH_ALL, notification); err != nil {
+	t := time.Now().Add(time.Second * 100)
+	if err = fcm.GlobalPushManager.AddPushTask(t, fcm.PUSH_ALL, nil, notification); err != nil {
 		log4go.Warn("add notify error : %v", err)
 	}
 
@@ -67,6 +81,7 @@ OUTFOR:
 		case <-sigs:
 			task.GlobalTaskManager.Stop()
 			fcm.GlobalAppServer.Stop()
+			listener.Close()
 			log4go.Info("get interrupt, gracefull stop")
 		case <-done:
 			log4go.Info("all routine done, exit")

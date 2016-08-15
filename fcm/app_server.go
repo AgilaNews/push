@@ -82,10 +82,138 @@ func (appServer *AppServer) onSendError(msg *gcm.CcsMessage) {
 	log4go.Global.Debug("on send error %v", msg)
 }
 
+func NewAppServer(sender_id, sk string) (*AppServer, error) {
+	gc, err := gcm.NewXmppGcmClient(sender_id, sk)
+	if err != nil {
+		return nil, err
+	}
+
+	appServer := &AppServer{
+		stop:        make(chan bool),
+		SenderId:    sender_id,
+		SecurityKey: sk,
+		client:      gc,
+	}
+	return appServer, nil
+}
+
+func NewNotificationDefaultOptions() *NotificationOptions {
+	return &NotificationOptions{
+		Priority:         HIGH_PRIORITY,
+		DelayWhileIdle:   &false_addr,
+		TTL:              &default_ttl,
+		OnReceiptHandler: nil,
+	}
+}
+
+func (appServer *AppServer) ConfirmRegistration(device *device.Device, msg_id string) {
+	confirm := &gcm.XmppMessage{
+		To:         device.Token,
+		MessageId:  msg_id,
+		Priority:   gcm.HighPriority,
+		TimeToLive: &default_ttl,
+		Data: gcm.Data{
+			"type":   CONFIRM_TYPE,
+			"status": REGISTER_SUCCESS,
+		},
+	}
+
+	go appServer.client.Send(*confirm)
+	log4go.Global.Info("[CONFIRMED][%v]", device.DeviceId)
+}
+
+func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notification *Notification) error {
+	msg := getXmppMessageFromNotification(notification)
+	msg.To = dev.Token
+
+	t := dev.Token
+	if len(t) > 32 {
+		t = t[:32]
+	}
+	log4go.Global.Info("[NOTIFY][%v][%s]", dev.DeviceId, t)
+
+	go appServer.client.Send(*msg)
+	return nil
+}
+
+func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) {
+	msg := getXmppMessageFromNotification(notification)
+	msg.To = fmt.Sprintf("/topics/%s", topic)
+
+	go appServer.client.Send(*msg)
+}
+
+func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {
+	msg_id := genMessageId()
+
+	return &gcm.XmppMessage{
+		MessageId:                msg_id,
+		Priority:                 notification.Options.Priority,
+		DelayWhileIdle:           notification.Options.DelayWhileIdle,
+		TimeToLive:               notification.Options.TTL,
+		DeliveryReceiptRequested: &true_addr,
+		ContentAvailable:         &true_addr,
+		Data: gcm.Data{
+			"type":    NOTIFICATION_TYPE,
+			"push_id": notification.PushId,
+			"tpl":     notification.Tpl,
+			"title":   notification.Title,
+			"digest":  notification.Digest,
+			"img":     notification.Image,
+			"news_id": notification.NewsId,
+		},
+	}
+}
+
+func (appServer *AppServer) Stop() {
+	appServer.client.Close()
+	appServer.stop <- true
+}
+
+func (appServer *AppServer) Work() {
+	log4go.Global.Info("app server starts")
+
+OUTFOR:
+	for {
+		if err := appServer.client.Listen(gcm.MessageHandler{
+			OnAck:       appServer.onAck,
+			OnNAck:      appServer.onNAck,
+			OnMessage:   appServer.onMessageReceived,
+			OnReceipt:   appServer.onReceipt,
+			OnSendError: appServer.onSendError,
+		}); err != nil {
+			log4go.Global.Warn("listen to gcm error: %v", err)
+		}
+
+		select {
+		case <-appServer.stop:
+			log4go.Global.Info("appserver exits")
+			break OUTFOR
+		default:
+		}
+
+		log4go.Global.Info("reconnect")
+	}
+
+}
+
+func genMessageId() string {
+	return uuid.NewV4().String()
+}
+
+func getOrDefault(m gcm.Data, key, def string) string {
+	if value, ok := m[key]; !ok {
+		return def
+	} else {
+		return value.(string)
+	}
+}
+
 func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 	t := msg.Data["type"].(string)
 	log4go.Global.Debug("on received message type:%v %v", t, msg)
 
+	//@Deprecated in the future
 	switch t {
 	case UPSTREAM_REGISTER:
 		token := getOrDefault(msg.Data, "token", "")
@@ -140,156 +268,5 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 		}
 	default:
 		log4go.Global.Warn("unknown type %v", t)
-	}
-}
-
-func NewAppServer(sender_id, sk string) (*AppServer, error) {
-	gc, err := gcm.NewXmppGcmClient(sender_id, sk)
-	if err != nil {
-		return nil, err
-	}
-
-	appServer := &AppServer{
-		stop:        make(chan bool),
-		SenderId:    sender_id,
-		SecurityKey: sk,
-		client:      gc,
-	}
-	return appServer, nil
-}
-
-func (appServer *AppServer) Stop() {
-	appServer.client.Close()
-	appServer.stop <- true
-}
-
-func (appServer *AppServer) Work() {
-	log4go.Global.Info("app server starts")
-
-OUTFOR:
-	for {
-		if err := appServer.client.Listen(gcm.MessageHandler{
-			OnAck:       appServer.onAck,
-			OnNAck:      appServer.onNAck,
-			OnMessage:   appServer.onMessageReceived,
-			OnReceipt:   appServer.onReceipt,
-			OnSendError: appServer.onSendError,
-		}); err != nil {
-			log4go.Global.Warn("listen to gcm error: %v", err)
-		}
-
-		select {
-		case <-appServer.stop:
-			log4go.Global.Info("appserver exits")
-			break OUTFOR
-		default:
-		}
-
-		log4go.Global.Info("reconnect")
-	}
-
-}
-
-func NewNotificationDefaultOptions() *NotificationOptions {
-	return &NotificationOptions{
-		Priority:         HIGH_PRIORITY,
-		DelayWhileIdle:   &false_addr,
-		TTL:              &default_ttl,
-		OnReceiptHandler: nil,
-	}
-}
-
-func (appServer *AppServer) ConfirmRegistration(device *device.Device, msg_id string) {
-	confirm := &gcm.XmppMessage{
-		To:         device.Token,
-		MessageId:  msg_id,
-		Priority:   gcm.HighPriority,
-		TimeToLive: &default_ttl,
-		Data: gcm.Data{
-			"type":   CONFIRM_TYPE,
-			"status": REGISTER_SUCCESS,
-		},
-	}
-
-	go appServer.client.Send(*confirm)
-	log4go.Global.Info("[CONFIRMED][%v]", device.DeviceId)
-}
-
-func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notification *Notification) error {
-	msg := getXmppMessageFromNotification(notification)
-	msg.To = dev.Token
-
-	t := dev.Token
-	if len(t) > 32 {
-		t = t[:32]
-	}
-	log4go.Global.Info("[NOTIFY][%v][%s]", dev.DeviceId, t)
-
-	go appServer.client.Send(*msg)
-	return nil
-}
-
-func (appServer *AppServer) BroadcastReset(topic string) error {
-	msg_id := genMessageId()
-	msg := &gcm.XmppMessage{
-		To:             fmt.Sprintf("/topics/%s", topic),
-		MessageId:      msg_id,
-		Priority:       HIGH_PRIORITY,
-		DelayWhileIdle: &false_addr,
-		TimeToLive:     &default_ttl,
-		Data: gcm.Data{
-			"type": REREGISTER_TYPE,
-		},
-	}
-
-	go appServer.client.Send(*msg)
-	return nil
-}
-
-func (appServer *AppServer) BroadcastNotificationToMutliTopic(condition string, notification *Notification) {
-	msg := getXmppMessageFromNotification(notification)
-	msg.Condition = condition
-
-	go appServer.client.Send(*msg)
-}
-
-func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) {
-	msg := getXmppMessageFromNotification(notification)
-	msg.To = fmt.Sprintf("/topics/%s", topic)
-
-	go appServer.client.Send(*msg)
-}
-
-func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {
-	msg_id := genMessageId()
-
-	return &gcm.XmppMessage{
-		MessageId:                msg_id,
-		Priority:                 notification.Options.Priority,
-		DelayWhileIdle:           notification.Options.DelayWhileIdle,
-		TimeToLive:               notification.Options.TTL,
-		DeliveryReceiptRequested: &true_addr,
-		ContentAvailable:         &true_addr,
-		Data: gcm.Data{
-			"type":    NOTIFICATION_TYPE,
-			"push_id": notification.PushId,
-			"tpl":     notification.Tpl,
-			"title":   notification.Title,
-			"digest":  notification.Digest,
-			"img":     notification.Image,
-			"news_id": notification.NewsId,
-		},
-	}
-}
-
-func genMessageId() string {
-	return uuid.NewV4().String()
-}
-
-func getOrDefault(m gcm.Data, key, def string) string {
-	if value, ok := m[key]; !ok {
-		return def
-	} else {
-		return value.(string)
 	}
 }
