@@ -70,7 +70,7 @@ func main() {
 		Options: fcm.NewNotificationDefaultOptions(),
 	}
 
-	t := time.Now().Add(time.Second * 100)
+	t := time.Now().Add(time.Second * 1)
 	if err = fcm.GlobalPushManager.AddPushTask(t, fcm.PUSH_ALL, nil, notification); err != nil {
 		log4go.Warn("add notify error : %v", err)
 	}

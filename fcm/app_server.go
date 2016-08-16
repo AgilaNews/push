@@ -136,11 +136,12 @@ func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notific
 	return nil
 }
 
-func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) {
+func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) error {
 	msg := getXmppMessageFromNotification(notification)
 	msg.To = fmt.Sprintf("/topics/%s", topic)
 
 	go appServer.client.Send(*msg)
+	return nil
 }
 
 func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {

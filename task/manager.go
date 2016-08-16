@@ -215,7 +215,6 @@ func (taskManager *TaskManager) NewOneshotTask(at time.Time,
 		RetryInterval:     retryInterval,
 		LastExecutionTime: time.Time{},
 		Handler:           taskManager.handlers[source],
-		DeliveryTime:      time.Time{},
 	}
 }
 
@@ -285,7 +284,6 @@ func (taskManager *TaskManager) doneTask(task *Task, status int) {
 
 		switch status {
 		case STATUS_SUCC:
-			task.DeliveryTime = time.Now()
 			taskManager.saveSuccessTask(task)
 		case STATUS_FAIL:
 			taskManager.updateTaskStatus(task, STATUS_FAIL)
@@ -403,8 +401,11 @@ func (taskManager *TaskManager) updateTaskStatus(task *Task, status int) error {
 func (taskManager *TaskManager) saveSuccessTask(task *Task) error {
 	log4go.Info("update task [%v] status SUCCESS", task.UserIdentifier)
 
-	task.DeliveryTime = time.Now()
-	if err := taskManager.wdb.Model(task).Update(map[string]interface{}{"status": STATUS_SUCC, "deliveryTime": task.DeliveryTime}).Error; err != nil {
+	task.LastExecutionTime = time.Now()
+	if err := taskManager.wdb.Model(task).Update(
+		map[string]interface{}{
+			"status":              STATUS_SUCC,
+			"last_execution_time": task.LastExecutionTime}).Error; err != nil {
 		return fmt.Errorf("update delivery time and status error")
 	}
 	task.Status = STATUS_SUCC

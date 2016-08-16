@@ -84,26 +84,36 @@ func getPendingPushMessage(request *restful.Request, response *restful.Response)
 }
 
 func getAllPushMessage(request *restful.Request, response *restful.Response) {
-	/*
-		pn_str := request.QueryParameter("pn")
-		page_size_str := request.QueryParameter("ps")
+	var err error
+	pn_str := request.QueryParameter("pn")
+	page_size_str := request.QueryParameter("ps")
 
-		pn := 10
-		ps := 0
-		if len(pn_str) > 0 {
-			if pn, err := strconv.Atoi(pn_str); err != nil {
-				response.WriteErrorString(400, "pn error")
-				return
-			}
+	pn := 10
+	ps := 0
+	if len(pn_str) > 0 {
+		if pn, err = strconv.Atoi(pn_str); err != nil {
+			response.WriteErrorString(400, "pn error")
+			return
 		}
+	}
 
-		if len(page_size_str) > 0 {
-			if ps, err := strconv.Atoi(page_size_str); err != nil {
-				response.WriteErrorString(400, "ps error")
-				return
-			}
+	if len(page_size_str) > 0 {
+		if ps, err = strconv.Atoi(page_size_str); err != nil {
+			response.WriteErrorString(400, "ps error")
+			return
 		}
-	*/
+	}
+
+	if pushes, total, err := fcm.GlobalPushManager.GetPushs(pn, ps); err != nil {
+		log4go.Global.Warn("get notification error: %v", err)
+		response.WriteErrorString(500, fmt.Sprint("get error : %v", err))
+	} else {
+		response.WriteAsJson(map[string]interface{}{
+			"push":  pushes,
+			"total": total,
+		})
+	}
+
 }
 
 func getPushDetail(request *restful.Request, response *restful.Response) {

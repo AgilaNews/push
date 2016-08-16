@@ -26,9 +26,7 @@ const (
 	STATUS_FINISH     = 6
 
 	PUSH_MIN_VERSION = "v1.1.5"
-	//	BROAD_BROADCAST  = "notification"
-	BROAD_BROADCAST = "android_v1.1.7"
-	//BROAD_BROADCAST = "com.upeninsula.banews"
+	BROAD_BROADCAST  = "android_v1.1.7"
 )
 
 type ClientVersion string
@@ -42,22 +40,24 @@ type PushContition struct {
 type PushModel struct {
 	gorm.Model
 
-	Tpl       string               `gorm:"column:tpl;type:varchar(32)"`
-	NewsId    string               `gorm:"column:news_id;type:varchar(32)";index`
-	Title     string               `gorm:"column:title;type:varchar(256)"`
-	Digest    string               `gorm:"column:digest;type:varchar(128)"`
-	Image     string               `gorm:"column:image;type:varchar(1024);"`
-	Options   *NotificationOptions `gorm:"-"`
-	OptionStr string               `gorm:"column:option'type:varchar(1024);"`
+	Tpl       string               `gorm:"column:tpl;type:varchar(32)" json:"tpl"`
+	NewsId    string               `gorm:"column:news_id;type:varchar(32)";index json:"news_id"`
+	Title     string               `gorm:"column:title;type:varchar(256)" json:"title"`
+	Digest    string               `gorm:"column:digest;type:varchar(128)" json:"digest"`
+	Image     string               `gorm:"column:image;type:varchar(1024);" json:"image"`
+	Options   *NotificationOptions `gorm:"-" json:"options"`
+	OptionStr string               `gorm:"column:option;type:varchar(1024);" json:"-"`
 
 	// internal use
-	Condition    *PushContition `gorm:"-"`
-	ConditionStr string         `gorm:"column:condition"`
+	ConditionStr string         `gorm:"column:condition" json:"-"`
+	Condition    *PushContition `gorm:"-" json:"condition"`
 
-	PlanTime    time.Time `gorm:"column:plan_time"`
-	DeliverTime time.Time `gorm:"column:delivery_time"`
-	DeliverType int       `gorm:"column:delivery_type;type:int(11)"`
-	Status      int       `gorm:"column:status;type:tinyint(4)";index`
+	PlanTime    time.Time `gorm:"column:plan_time" json:"plan_time"`
+	DeliverType int       `gorm:"column:delivery_type;type:int(11)" json:"deliver_type"`
+
+	//from task, we don't use foreign keys because it introducd unnesscary complex
+	Status      int       `gorm:"-" json:"status"`
+	DeliverTime time.Time `gorm:"-" json:"deliver_time"`
 }
 
 //this type is sent to FCM server
@@ -111,7 +111,6 @@ func (n *Notification) getPushModel() *PushModel {
 		Digest:  n.Digest,
 		Image:   n.Image,
 		Options: n.Options,
-		Status:  STATUS_INIT,
 	}
 }
 
@@ -119,9 +118,15 @@ func (pushManager *PushManager) PushTaskHandler(push_id_str string, context inte
 	push := context.(*PushModel)
 	log4go.Info("handle push task at [%v] of push [%v]", time.Now(), push_id_str)
 
-	if push.DeliverType == PUSH_ALL {
+	switch push.DeliverType {
+	case PUSH_ALL:
 		notification := push.getNotification()
 		GlobalAppServer.BroadcastNotificationToTopic(BROAD_BROADCAST, notification)
+
+	case PUSH_TO_DEVICE:
+		//notification := push.getNotification()
+		//GlobalAppServer.PushNotificationToDevice()
+
 	}
 
 	return nil
@@ -161,9 +166,21 @@ func (p *PushManager) GetPush(id string) (*PushModel, error) {
 	pushModel := &PushModel{}
 
 	if err := p.rdb.First(pushModel, id).Error; err != nil {
-		return pushModel, nil
-	} else {
 		return nil, err
+	} else {
+		//get status
+		var t task.Task
+		if err := p.rdb.Select("status", "last_execution_time").
+			Where("uid = ? and source=?", pushModel.ID, task.TASK_SOURCE_PUSH).
+			First(&t).Error; err != nil {
+			return nil, err
+		} else {
+			pushModel.Status = t.Status
+			pushModel.DeliverTime = t.LastExecutionTime
+
+			return pushModel, nil
+		}
+
 	}
 }
 
@@ -176,13 +193,18 @@ func (p *PushManager) BatchGetPush(ids []string) ([]*PushModel, error) {
 	}
 }
 
-func (p *PushManager) GetPushs(page_number, page_size int) ([]*PushModel, error) {
+func (p *PushManager) GetPushs(page_number, page_size int) ([]*PushModel, int, error) {
 	models := make([]*PushModel, 0)
+	var count int
+
+	if err := p.rdb.Find(&PushModel{}).Count(&count).Error; err != nil {
+		return nil, 0, err
+	}
 
 	off := page_number * page_size
 	if err := p.rdb.Find(&models).Offset(off).Limit(page_size).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	} else {
-		return models, nil
+		return models, count, nil
 	}
 }
