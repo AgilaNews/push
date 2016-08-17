@@ -169,7 +169,7 @@ func Init() error {
 		return err
 	}
 
-	task.GlobalTaskManager.RegisterTaskSourceHandler(task.TASK_SOURCE_PUSH, fcm.GlobalPushManager.PushTaskHandler)
+	task.GlobalTaskManager.RegisterTaskSourceHandler(task.TASK_SOURCE_PUSH, fcm.GlobalPushManager)
 
 	log4go.Global.Info("env init success [%v]", value)
 	return nil

@@ -19,5 +19,6 @@ type DeviceMapper interface {
 	RemoveDevice(device *Device) error
 	GetDeviceByToken(token string) (*Device, error)
 	GetDeviceById(device_id string) (*Device, error)
+	GetDevicesById(device_ids []string) ([]*Device, error)
 	GetAllDevice() ([]*Device, error)
 }

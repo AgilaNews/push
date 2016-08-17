@@ -2,7 +2,6 @@ package task
 
 import (
 	"container/heap"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -12,39 +11,57 @@ import (
 )
 
 const (
-	TASK_TYPE_PERIODIC = 1
-	TASK_TYPE_ONESHOT  = 2
+	TASK_TYPE_PERIODIC = TaskType(1)
+	TASK_TYPE_ONESHOT  = TaskType(2)
 
-	TASK_SOURCE_PUSH = 1
+	TASK_SOURCE_PUSH = TaskSource(0)
 
-	STATUS_INIT    = 0 //init but may editing
-	STATUS_PENDING = 1 //added to pending Queue
-	STATUS_EXEC    = 2
-	STATUS_SUCC    = 3
-	STATUS_FAIL    = 4
+	STATUS_INIT    = TaskStatus(0) //init but may editing
+	STATUS_PENDING = TaskStatus(1) //added to pending Queue
+	STATUS_EXEC    = TaskStatus(2)
+	STATUS_SUCC    = TaskStatus(3)
+	STATUS_FAIL    = TaskStatus(4)
 
 	TICK = time.Minute
 )
 
+type TaskSource int
+type TaskStatus int
+type TaskType int
+
+type TaskHandler interface {
+	DoTask(identifier string, context interface{}) error
+	Sync(uid string) (interface{}, error)
+}
+
+type TaskKey struct {
+	Source TaskSource
+	Uid    string
+}
+
 type Task struct {
-	gorm.Model
-	UserIdentifier    string    `gorm:"column:uid;type:varchar(32);not null;index"`
-	Type              int       `gorm:"column:type;type:tinyint(4)"`
-	TaskSource        int       `gorm:"column:source;type:int(11)"`
-	Period            int       `gorm:"column:period;type:int(11)"`
-	DeliveryTime      time.Time `gorm:"column:delivery_time"`
-	LastExecutionTime time.Time `gorm:"column:last_execution_time"`
-	NextExecutionTime time.Time `gorm:"column:next_execution_time"`
-	Status            int       `gorm:"column:status;type:tinyint(4);index"`
+	ID        uint      `gorm:"column:id;primary_key"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+
+	UserIdentifier    string     `gorm:"column:uid;type:varchar(32);not null;index"`
+	Type              TaskType   `gorm:"column:type;type:tinyint(4)"`
+	Source            TaskSource `gorm:"column:source;type:tinyint(4)"`
+	Period            int        `gorm:"column:period;type:int(11)"`
+	LastExecutionTime time.Time  `gorm:"column:last_execution_time"`
+	NextExecutionTime time.Time  `gorm:"column:next_execution_time"`
+	Status            TaskStatus `gorm:"column:status;type:tinyint(4);index"`
+
+	Click     int     `gorm:"column:click"`
+	Reach     int     `gorm:"column:reach"`
+	ClickRate float32 `gorm:"column:click_rate"`
 
 	Retry         int `gorm:"-"`
 	RetryInterval int `gorm:"-"`
 	Timeout       int `gorm:"-"`
 
-	Handler TaskHandler `gorm:"-"`
+	Handler TaskHandler `gorm:"-" json:"-"`
 	Context interface{} `gorm:"-"`
-
-	ContextStr string `gorm:"column:context"`
 }
 
 type TaskLog struct {
@@ -57,7 +74,7 @@ type TaskLog struct {
 type TaskManager struct {
 	TaskMap struct {
 		sync.RWMutex
-		inner map[string]*Task
+		inner map[TaskKey]*Task
 	}
 	PendingQueue struct {
 		sync.RWMutex
@@ -70,10 +87,9 @@ type TaskManager struct {
 	wdb *gorm.DB
 	rdb *gorm.DB
 
-	handlers map[int]TaskHandler
+	handlers map[TaskSource]TaskHandler
 }
 
-type TaskHandler func(identifier string, context interface{}) error
 type PriorityQueue []*Task
 
 var (
@@ -88,9 +104,9 @@ func NewTaskManager(rdb, wdb *gorm.DB) (*TaskManager, error) {
 	m := &TaskManager{
 		TaskMap: struct {
 			sync.RWMutex
-			inner map[string]*Task
+			inner map[TaskKey]*Task
 		}{
-			inner: make(map[string]*Task),
+			inner: make(map[TaskKey]*Task),
 		},
 		PendingQueue: struct {
 			sync.RWMutex
@@ -104,7 +120,7 @@ func NewTaskManager(rdb, wdb *gorm.DB) (*TaskManager, error) {
 		wdb:  wdb,
 		rdb:  rdb,
 
-		handlers: make(map[int]TaskHandler),
+		handlers: make(map[TaskSource]TaskHandler),
 	}
 
 	heap.Init(&m.PendingQueue.inner)
@@ -136,14 +152,19 @@ func (q *PriorityQueue) Push(x interface{}) {
 	*q = append(*q, x.(*Task))
 }
 
-func (taskManager *TaskManager) RegisterTaskSourceHandler(source int, handler TaskHandler) {
+func (taskManager *TaskManager) RegisterTaskSourceHandler(source TaskSource, handler TaskHandler) {
 	taskManager.handlers[source] = handler
 }
 
 func (taskManager *TaskManager) internalAddTask(task *Task) error {
 	var ok bool
+	key := TaskKey{
+		Source: task.Source,
+		Uid:    task.UserIdentifier,
+	}
+
 	taskManager.TaskMap.RLock()
-	_, ok = taskManager.TaskMap.inner[task.UserIdentifier]
+	_, ok = taskManager.TaskMap.inner[key]
 	taskManager.TaskMap.RUnlock()
 
 	if ok {
@@ -151,13 +172,13 @@ func (taskManager *TaskManager) internalAddTask(task *Task) error {
 	}
 
 	taskManager.TaskMap.Lock()
-	_, ok = taskManager.TaskMap.inner[task.UserIdentifier]
+	_, ok = taskManager.TaskMap.inner[key]
 	if ok {
 		taskManager.TaskMap.Unlock()
 		return fmt.Errorf("tasks exists")
 	}
 
-	taskManager.TaskMap.inner[task.UserIdentifier] = task
+	taskManager.TaskMap.inner[key] = task
 	taskManager.TaskMap.Unlock()
 
 	return nil
@@ -199,7 +220,8 @@ func (*TaskManager) GetTaskLog(id int) (*TaskLog, error) {
 
 func (taskManager *TaskManager) NewOneshotTask(at time.Time,
 	identifier string,
-	source, retry, retryInterval int,
+	source TaskSource,
+	retry, retryInterval int,
 	context interface{}) *Task {
 	if _, ok := taskManager.handlers[source]; !ok {
 		panic("please register your type first")
@@ -208,7 +230,7 @@ func (taskManager *TaskManager) NewOneshotTask(at time.Time,
 	return &Task{
 		UserIdentifier:    identifier,
 		Type:              TASK_TYPE_ONESHOT,
-		TaskSource:        source,
+		Source:            source,
 		NextExecutionTime: at,
 		Context:           context,
 		Retry:             retry,
@@ -255,7 +277,7 @@ func (taskManager *TaskManager) GetTasks(pn, ps int) ([]*Task, int) {
 	return ret, len(taskManager.PendingQueue.inner)/pn + 1
 }
 
-func (taskManager *TaskManager) AddTask(task *Task) error {
+func (taskManager *TaskManager) AddAndScheduleTask(task *Task) error {
 	now := time.Now()
 	if task.NextExecutionTime.Before(now) {
 		return fmt.Errorf("can't add task than now: %v < %v", task.NextExecutionTime, now)
@@ -269,24 +291,29 @@ func (taskManager *TaskManager) AddTask(task *Task) error {
 	if err := taskManager.internalAddTask(task); err != nil {
 		return fmt.Errorf("add internal task error: %v", err)
 	}
-	log4go.Info("new task %v added type:%v next execution time %s", task.UserIdentifier, task.Type, task.NextExecutionTime)
 
+	log4go.Info("new task %v added type:%v next execaution time %s", task.UserIdentifier, task.Type, task.NextExecutionTime)
 	taskManager.addTaskToPendingQueue(task)
 	return nil
 }
 
-func (taskManager *TaskManager) doneTask(task *Task, status int) {
+func (taskManager *TaskManager) doneTask(task *Task, status TaskStatus) {
+	key := TaskKey{
+		Uid:    task.UserIdentifier,
+		Source: task.Source,
+	}
+
 	switch task.Type {
 	case TASK_TYPE_ONESHOT:
-		taskManager.TaskMap.Lock()
-		delete(taskManager.TaskMap.inner, task.UserIdentifier)
-		taskManager.TaskMap.Unlock()
-
 		switch status {
 		case STATUS_SUCC:
 			taskManager.saveSuccessTask(task)
+			fallthrough
 		case STATUS_FAIL:
 			taskManager.updateTaskStatus(task, STATUS_FAIL)
+			taskManager.TaskMap.Lock()
+			delete(taskManager.TaskMap.inner, key)
+			taskManager.TaskMap.Unlock()
 		}
 	default:
 		panic("not support task type yet")
@@ -305,7 +332,7 @@ func (taskManager *TaskManager) runTasks(tasks []*Task) {
 			b := task.Retry
 			for {
 				taskManager.updateTaskStatus(task, STATUS_EXEC)
-				err := task.Handler(task.UserIdentifier, task.Context)
+				err := task.Handler.DoTask(task.UserIdentifier, task.Context)
 				if err != nil {
 					if task.Retry > 0 {
 						log4go.Global.Info("task %v-%v fails, retry (%v/%v)", task.Type, task.UserIdentifier, task.Retry, b)
@@ -361,17 +388,29 @@ func (taskManager *TaskManager) Stop() {
 	taskManager.stop <- true
 }
 
-func (taskManager *TaskManager) syncTask() error {
+func (taskManager *TaskManager) SyncTask() error {
 	tasks := []*Task{}
-	if err := taskManager.rdb.Where("status in ", []int{STATUS_PENDING, STATUS_EXEC, STATUS_INIT}).Find(&tasks).Error; err != nil {
+	if err := taskManager.rdb.Where("status in (?)", []TaskStatus{STATUS_PENDING, STATUS_EXEC, STATUS_INIT}).Find(&tasks).Error; err != nil {
 		return err
 	}
 
 	for _, task := range tasks {
-		if _, ok := taskManager.handlers[task.TaskSource]; !ok {
+		var context interface{}
+		var err error
+
+		if _, ok := taskManager.handlers[task.Source]; !ok {
+			log4go.Warn("unknown task source :%v", task.Source)
 			continue
 		} else {
-			task.Handler = taskManager.handlers[task.TaskSource]
+			task.Handler = taskManager.handlers[task.Source]
+			context, err = task.Handler.Sync(task.UserIdentifier)
+
+			if err != nil {
+				log4go.Warn("task context sync error: %v", err)
+				continue
+			} else {
+				task.Context = context
+			}
 		}
 
 		now := time.Now()
@@ -379,16 +418,16 @@ func (taskManager *TaskManager) syncTask() error {
 			log4go.Warn("next execution time is to early, just set it to failure")
 			taskManager.updateTaskStatus(task, STATUS_FAIL)
 		} else {
-			if err := taskManager.AddTask(task); err != nil {
-				log4go.Warn("add task error : ", err)
-			}
+
+			taskManager.addTaskToPendingQueue(task)
+			log4go.Warn("schedule task : [%v]", task.UserIdentifier)
 		}
 	}
 
 	return nil
 }
 
-func (taskManager *TaskManager) updateTaskStatus(task *Task, status int) error {
+func (taskManager *TaskManager) updateTaskStatus(task *Task, status TaskStatus) error {
 	if err := taskManager.wdb.Model(task).Update("status", status).Error; err != nil {
 		return fmt.Errorf("update taks error : %v", status)
 	}
@@ -411,7 +450,20 @@ func (taskManager *TaskManager) saveSuccessTask(task *Task) error {
 	task.Status = STATUS_SUCC
 
 	return nil
+}
 
+func (taskManager *TaskManager) getTask(uid string, source TaskSource) *Task {
+	key := TaskKey{
+		Uid:    uid,
+		Source: source,
+	}
+	taskManager.TaskMap.RLock()
+	defer taskManager.TaskMap.RUnlock()
+	if e, ok := taskManager.TaskMap.inner[key]; ok {
+		return e
+	} else {
+		return nil
+	}
 }
 
 func (taskManager *TaskManager) saveTaskLog(tasklog *TaskLog) {
@@ -430,16 +482,7 @@ func (taskManager *TaskManager) saveTaskLog(tasklog *TaskLog) {
 }
 
 func (taskManager *TaskManager) saveTaskToDB(task *Task) error {
-	var c []byte
 	var err error
-
-	if task.Context != nil {
-		c, err = json.Marshal(task.Context)
-		if err != nil {
-			return fmt.Errorf("illegal context format (must be json-able): %v", err)
-		}
-		task.ContextStr = string(c)
-	}
 
 	if err = taskManager.wdb.Create(task).Error; err != nil {
 		return err

@@ -19,15 +19,6 @@ type RedisDeviceMapper struct {
 
 func NewRedisDeviceMapper(addr string) (*RedisDeviceMapper, error) {
 	mapper := &RedisDeviceMapper{}
-	/*
-		mapper.redis_client = redis.NewFailoverClient(
-			&redis.FailoverOptions{
-				MasterName:    "master",
-				SentinelAddrs: []string{addr},
-				MaxRetries:    3,
-			},
-		)
-	*/
 	mapper.redis_client = redis.NewClient(
 		&redis.Options{
 			Addr: addr,
@@ -77,6 +68,29 @@ func (dm *RedisDeviceMapper) GetDeviceByToken(token string) (*Device, error) {
 
 func (dm *RedisDeviceMapper) GetDeviceById(device_id string) (*Device, error) {
 	return dm.getDeviceFromRedis(DEVICEID_PREFIX, device_id)
+}
+
+func (dm *RedisDeviceMapper) GetDevicesById(device_ids []string) ([]*Device, error) {
+	dm.RLock()
+	defer dm.RUnlock()
+
+	ret := make([]*Device, len(device_ids))
+
+	if values, err := dm.redis_client.HMGet(DEVICEID_PREFIX, device_ids...).Result(); err != nil {
+		return nil, err
+	} else {
+		for idx, v := range values {
+			device := &Device{}
+
+			if err := json.Unmarshal(v.([]byte), device); err != nil {
+				ret[idx] = nil
+			} else {
+				ret[idx] = device
+			}
+		}
+	}
+
+	return ret, nil
 }
 
 func (dm *RedisDeviceMapper) GetAllDevice() ([]*Device, error) {

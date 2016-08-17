@@ -13,19 +13,21 @@ import (
 	"time"
 
 	"github.com/alecthomas/log4go"
+	"github.com/emicklei/go-restful"
 )
 
 func main() {
 	var err error
 	var wg sync.WaitGroup
 	var listener *net.TCPListener
+	var container *restful.Container
 
 	if err = env.Init(); err != nil {
 		fmt.Println("init error : %v\n", err)
 		os.Exit(-1)
 	}
 
-	if listener, err = NewRestfulHandler(env.Config.HttpServer.Addr); err != nil {
+	if listener, container, err = NewRestfulHandler(env.Config.HttpServer.Addr); err != nil {
 		fmt.Println("init resful : %v\n", err)
 		os.Exit(-1)
 	}
@@ -42,7 +44,12 @@ func main() {
 
 	go func() {
 		defer wg.Done()
+		if err := task.GlobalTaskManager.SyncTask(); err != nil {
+			log4go.Warn("sync task info error")
+		}
+
 		task.GlobalTaskManager.Run()
+
 		log4go.Info("task manager done")
 	}()
 
@@ -50,7 +57,7 @@ func main() {
 		defer wg.Done()
 
 		log4go.Info("http starts at: %v", listener.Addr())
-		http.Serve(listener, nil)
+		http.Serve(listener, container)
 		log4go.Info("http server stoped")
 	}()
 
@@ -70,9 +77,12 @@ func main() {
 		Options: fcm.NewNotificationDefaultOptions(),
 	}
 
-	t := time.Now().Add(time.Second * 1)
-	if err = fcm.GlobalPushManager.AddPushTask(t, fcm.PUSH_ALL, nil, notification); err != nil {
+	t := time.Now().Add(time.Second * 100)
+
+	if _, err := fcm.GlobalPushManager.NewPushMessage(t, fcm.PUSH_ALL, nil, notification); err != nil {
 		log4go.Warn("add notify error : %v", err)
+	} else {
+		//	fcm.GlobalPushManager.FirePushTask(model)
 	}
 
 OUTFOR:
