@@ -39,7 +39,8 @@ type Configuration struct {
 		SecurityKey string `json:"security_key"`
 	} `json:"app_server"`
 	HttpServer struct {
-		Addr string `json:"addr"`
+		Addr        string `json:"addr"`
+		SwaggerPath string `json:"swagger_path"`
 	} `json:"http_server"`
 	Mysql struct {
 		Read  MysqlConfiguration `json:"read"`

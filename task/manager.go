@@ -21,6 +21,7 @@ const (
 	STATUS_EXEC    = TaskStatus(2)
 	STATUS_SUCC    = TaskStatus(3)
 	STATUS_FAIL    = TaskStatus(4)
+	STATUS_CANCEL  = TaskStatus(5)
 
 	TICK = time.Minute
 )
@@ -40,9 +41,10 @@ type TaskKey struct {
 }
 
 type Task struct {
-	ID        uint      `gorm:"column:id;primary_key"`
-	CreatedAt time.Time `gorm:"column:created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
+	ID         uint      `gorm:"column:id;primary_key"`
+	CreatedAt  time.Time `gorm:"column:created_at"`
+	UpdatedAt  time.Time `gorm:"column:updated_at"`
+	CanceledAt time.Time `gorm:"column:canceled_at"`
 
 	UserIdentifier    string     `gorm:"column:uid;type:varchar(32);not null;index"`
 	Type              TaskType   `gorm:"column:type;type:tinyint(4)"`
@@ -100,6 +102,10 @@ func (Task) TableName() string {
 	return "tb_task"
 }
 
+func (t *Task) Equal(other *Task) bool {
+	return t.UserIdentifier == other.UserIdentifier && t.Source == other.Source
+}
+
 func NewTaskManager(rdb, wdb *gorm.DB) (*TaskManager, error) {
 	m := &TaskManager{
 		TaskMap: struct {
@@ -154,6 +160,34 @@ func (q *PriorityQueue) Push(x interface{}) {
 
 func (taskManager *TaskManager) RegisterTaskSourceHandler(source TaskSource, handler TaskHandler) {
 	taskManager.handlers[source] = handler
+}
+
+func (taskManager *TaskManager) internalRemoveTask(task *Task) error {
+	var ok bool
+	key := TaskKey{
+		Source: task.Source,
+		Uid:    task.UserIdentifier,
+	}
+
+	taskManager.TaskMap.RLock()
+	_, ok = taskManager.TaskMap.inner[key]
+	taskManager.TaskMap.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("task not exists: %v", key)
+	}
+
+	taskManager.TaskMap.Lock()
+	_, ok = taskManager.TaskMap.inner[key]
+	if !ok {
+		taskManager.TaskMap.Unlock()
+		return fmt.Errorf("tasks not exists: %v", key)
+	}
+
+	delete(taskManager.TaskMap.inner, key)
+	taskManager.TaskMap.Unlock()
+
+	return nil
 }
 
 func (taskManager *TaskManager) internalAddTask(task *Task) error {
@@ -249,7 +283,38 @@ func (taskManager *TaskManager) addTaskToPendingQueue(task *Task) {
 	case taskManager.wake <- true:
 	default:
 	}
+}
 
+func (taskManager *TaskManager) CancelTask(uid string, source TaskSource) error {
+	task := &Task{}
+
+	if err := taskManager.rdb.Where("uid = ? and source = ?", uid, source).First(task).Error; err != nil {
+		return err
+	}
+
+	if err := taskManager.saveCancelTask(task); err != nil {
+		return err
+	}
+
+	taskManager.PendingQueue.Lock()
+	for idx, iter := range taskManager.PendingQueue.inner {
+		if task.Equal(iter) {
+			//remove element
+			taskManager.PendingQueue.inner = append(taskManager.PendingQueue.inner[:idx], taskManager.PendingQueue.inner[idx+1:]...)
+			break
+		}
+	}
+	taskManager.PendingQueue.Unlock()
+
+	if err := taskManager.internalRemoveTask(task); err != nil {
+		return err
+	}
+
+	select {
+	case taskManager.wake <- true:
+	default:
+	}
+	return nil
 }
 
 func (taskManager *TaskManager) GetTasks(pn, ps int) ([]*Task, int) {
@@ -452,33 +517,25 @@ func (taskManager *TaskManager) saveSuccessTask(task *Task) error {
 	return nil
 }
 
-func (taskManager *TaskManager) getTask(uid string, source TaskSource) *Task {
-	key := TaskKey{
-		Uid:    uid,
-		Source: source,
+func (taskManager *TaskManager) saveCancelTask(task *Task) error {
+	log4go.Info("update task [%v] status canceld", task.UserIdentifier)
+
+	task.CanceledAt = time.Now()
+
+	if err := taskManager.wdb.Model(task).Update(
+		map[string]interface{}{
+			"status":      STATUS_CANCEL,
+			"canceled_at": task.CanceledAt}).Error; err != nil {
+		return fmt.Errorf("update canceld time and status error")
 	}
-	taskManager.TaskMap.RLock()
-	defer taskManager.TaskMap.RUnlock()
-	if e, ok := taskManager.TaskMap.inner[key]; ok {
-		return e
-	} else {
-		return nil
-	}
+
+	task.Status = STATUS_CANCEL
+
+	return nil
 }
 
 func (taskManager *TaskManager) saveTaskLog(tasklog *TaskLog) {
-	/*
-		_, err := taskManager.wdb.Exec("INSERT INTO tb_task_log(`task_id`, `status`, `start_time`, `end_time`)"+
-			"VALUES(?,?,?,?)",
-			tasklog.TaskId,
-			tasklog.Status,
-			int(tasklog.Start.Unix()),
-			int(tasklog.End.Unix()),
-		)
-
-		if err != nil {
-			log4go.Warn("insert task log fail %v", tasklog)
-		}*/
+	panic("error")
 }
 
 func (taskManager *TaskManager) saveTaskToDB(task *Task) error {

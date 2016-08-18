@@ -73,16 +73,23 @@ func main() {
 		NewsId:  "quz2RgKCIpY=",
 		Title:   "Pinoy students win 5 medals in Romania math contest",
 		Digest:  "Agila",
-		Image:   "",
+		Image:   "http://s1.agilanews.com/image/ZTqUvJtw6T0%3D.jpg?",
 		Options: fcm.NewNotificationDefaultOptions(),
 	}
 
-	t := time.Now().Add(time.Second * 100)
+	t := time.Now().Add(time.Second * 15)
 
-	if _, err := fcm.GlobalPushManager.NewPushMessage(t, fcm.PUSH_ALL, nil, notification); err != nil {
+	if model, err := fcm.GlobalPushManager.NewPushMessage(t, fcm.PUSH_ALL, nil, notification); err != nil {
 		log4go.Warn("add notify error : %v", err)
 	} else {
-		//	fcm.GlobalPushManager.FirePushTask(model)
+		fcm.GlobalPushManager.FirePushTask(model.ID)
+
+		go func() {
+			time.Sleep(time.Second * 3)
+			if err := fcm.GlobalPushManager.CancelPush(model.ID); err != nil {
+				log4go.Warn("cancel task error :%v", err)
+			}
+		}()
 	}
 
 OUTFOR:

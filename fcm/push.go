@@ -38,11 +38,14 @@ type PushCondition struct {
 }
 
 type PushModel struct {
-	ID        uint      `gorm:"column:id;primary_key" json:"id"`
-	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+	ID             uint      `gorm:"column:id;primary_key" json:"id"`
+	CreatedAt      time.Time `gorm:"column:created_at" json:"-"`
+	CreatedAtUnix  int64     `gorm:"-" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at" json:"-"`
+	UpdatedAtUnix  int64     `gorm:"-" json:"updated_at"`
+	CanceledAt     time.Time `gorm:"column:canceled_at" json:"-"`
+	CanceledAtUnix int64     `gorm:"-" json:"canceled_at"`
 
-	To        string               `gorm:"column:to;type:varchar(1024)" json:"to"`
 	Tpl       string               `gorm:"column:tpl;type:varchar(32)" json:"tpl"`
 	NewsId    string               `gorm:"column:news_id;type:varchar(32);index" json:"news_id"`
 	Title     string               `gorm:"column:title;type:varchar(256)" json:"title"`
@@ -55,16 +58,18 @@ type PushModel struct {
 	ConditionStr string         `gorm:"column:condition;type:varchar(4096);" json:"-"`
 	Condition    *PushCondition `gorm:"-" json:"condition"`
 
-	PlanTime    time.Time `gorm:"column:plan_time" json:"plan_time"`
-	DeliverType PushType  `gorm:"column:delivery_type;type:int(11)" json:"deliver_type"`
+	PlanTime     time.Time `gorm:"column:plan_time" json:"-"`
+	PlanTimeUnix int64     `gorm:"-" json:"plan_time"`
+	DeliverType  PushType  `gorm:"column:delivery_type;type:int(11)" json:"deliver_type"`
 
 	Click     int     `gorm:"column:click" json:"click"`
 	Reach     int     `gorm:"column:reach" json:"reach"`
 	ClickRate float32 `gorm:"column:click_rate" json:"click_rate"`
 
 	//from task, we don't use foreign keys because it introducd unnesscary complex
-	Status      task.TaskStatus `gorm:"-" json:"status"`
-	DeliverTime time.Time       `gorm:"-" json:"deliver_time"`
+	Status          task.TaskStatus `gorm:"-" json:"status"`
+	DeliverTime     time.Time       `gorm:"-" json:"-"`
+	DeliverTimeUnix int64           `grom:"-" json:"deliver_time"`
 }
 
 //this type is sent to FCM server
@@ -103,6 +108,13 @@ func (m *PushModel) BeforeCreate() error {
 	t, _ = json.Marshal(m.Options)
 	m.OptionStr = string(t)
 	t, _ = json.Marshal(m.Condition)
+	m.ConditionStr = string(t)
+
+	m.CreatedAtUnix = m.CreatedAt.Unix()
+	m.UpdatedAtUnix = m.UpdatedAt.Unix()
+	m.DeliverTimeUnix = m.DeliverTime.Unix()
+	m.PlanTimeUnix = m.PlanTime.Unix()
+	m.CanceledAtUnix = m.CanceledAt.Unix()
 	return nil
 }
 
@@ -111,6 +123,13 @@ func (m *PushModel) BeforeUpdate() error {
 	t, _ = json.Marshal(m.Options)
 	m.OptionStr = string(t)
 	t, _ = json.Marshal(m.Condition)
+	m.ConditionStr = string(t)
+
+	m.CreatedAtUnix = m.CreatedAt.Unix()
+	m.UpdatedAtUnix = m.UpdatedAt.Unix()
+	m.DeliverTimeUnix = m.DeliverTime.Unix()
+	m.PlanTimeUnix = m.PlanTime.Unix()
+	m.CanceledAtUnix = m.CanceledAt.Unix()
 	return nil
 }
 
@@ -130,6 +149,12 @@ func (m *PushModel) AfterFind() error {
 			return err
 		}
 	}
+
+	m.CreatedAtUnix = m.CreatedAt.Unix()
+	m.UpdatedAtUnix = m.UpdatedAt.Unix()
+	m.CanceledAtUnix = m.CanceledAt.Unix()
+
+	m.PlanTimeUnix = m.PlanTime.Unix()
 
 	return nil
 }
@@ -180,13 +205,10 @@ func (pushManager *PushManager) DoTask(push_id_str string, context interface{}) 
 
 	case PUSH_MULTICAST:
 		notification := push.getNotification()
+		notification.PushId = 1
 		///check push model validation
-		if devices, err := device.GlobalDeviceMapper.GetDevicesById(push.Condition.Devices); err != nil {
-			return err
-		} else {
-			for _, device := range devices {
-				GlobalAppServer.PushNotificationToDevice(device, notification)
-			}
+		if err := pushManager.InstantMulticast(push.Condition.Devices, notification); err != nil {
+			log4go.Warn("instant push error : %v", err)
 		}
 	}
 
@@ -200,6 +222,19 @@ func NewPushManager(taskManager *task.TaskManager, wdb, rdb *gorm.DB) (*PushMana
 	}
 
 	return manager, nil
+}
+
+func (p *PushManager) InstantMulticast(device_ids []string, notification *Notification) error {
+	notification.PushId = 1
+
+	if devices, err := device.GlobalDeviceMapper.GetDevicesById(device_ids); err != nil {
+		return err
+	} else {
+		for _, device := range devices {
+			GlobalAppServer.PushNotificationToDevice(device, notification)
+		}
+	}
+	return nil
 }
 
 func (p *PushManager) NewPushMessage(at time.Time, deliver_type PushType, condition *PushCondition, notification *Notification) (*PushModel, error) {
@@ -236,7 +271,20 @@ func (p *PushManager) UpdatePush(push_id int, at time.Time, condition *PushCondi
 	return &pushModel, nil
 }
 
-func (p *PushManager) FirePushTask(pushModel *PushModel) error {
+func (p *PushManager) FirePushTask(id uint) error {
+	pushModel := &PushModel{}
+	if err := p.rdb.Where(id).First(pushModel).Error; err != nil {
+		return err
+	}
+
+	if err := p.getTaskStatusOfPushes([]*PushModel{pushModel}); err != nil {
+		return err
+	}
+
+	if pushModel.Status != task.STATUS_INIT {
+		return fmt.Errorf("only task in edit status could be fired")
+	}
+
 	t := task.GlobalTaskManager.NewOneshotTask(pushModel.PlanTime,
 		strconv.Itoa(int(pushModel.ID)),
 		task.TASK_SOURCE_PUSH,
@@ -245,6 +293,34 @@ func (p *PushManager) FirePushTask(pushModel *PushModel) error {
 		pushModel)
 
 	if err := task.GlobalTaskManager.AddAndScheduleTask(t); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *PushManager) CancelPush(id uint) error {
+	pushModel := &PushModel{}
+	if err := p.rdb.Where(id).First(pushModel).Error; err != nil {
+		return err
+	}
+
+	if err := p.getTaskStatusOfPushes([]*PushModel{pushModel}); err != nil {
+		return err
+	}
+
+	if pushModel.Status != task.STATUS_PENDING {
+		return fmt.Errorf("only task in scheduling could be canceld, running task is too late to stop")
+	}
+
+	uid := strconv.Itoa(int(pushModel.ID))
+	if err := task.GlobalTaskManager.CancelTask(uid, task.TASK_SOURCE_PUSH); err != nil {
+		return err
+	}
+
+	pushModel.CanceledAt = time.Now()
+
+	if err := p.wdb.Save(pushModel).Error; err != nil {
 		return err
 	}
 
@@ -284,7 +360,7 @@ func (p *PushManager) BatchGetPush(ids []string) ([]*PushModel, error) {
 	if err := p.rdb.Find(&models, ids).Error; err != nil {
 		return nil, err
 	} else {
-		if err = p.GetTaskStatusOfPushes(models); err != nil {
+		if err = p.getTaskStatusOfPushes(models); err != nil {
 			return nil, err
 		} else {
 			return models, nil
@@ -308,7 +384,7 @@ func (p *PushManager) GetPushs(start, length int, filters map[string]string) ([]
 	if err := p.rdb.Offset(start).Limit(length).Order("id desc").Find(&models).Error; err != nil {
 		return nil, 0, err
 	} else {
-		if err = p.GetTaskStatusOfPushes(models); err != nil {
+		if err = p.getTaskStatusOfPushes(models); err != nil {
 			return nil, 0, err
 		} else {
 			return models, count, nil
@@ -316,7 +392,7 @@ func (p *PushManager) GetPushs(start, length int, filters map[string]string) ([]
 	}
 }
 
-func (p *PushManager) GetTaskStatusOfPushes(models []*PushModel) error {
+func (p *PushManager) getTaskStatusOfPushes(models []*PushModel) error {
 	uids := make([]string, len(models))
 	m := make(map[string]*PushModel)
 
@@ -335,6 +411,7 @@ func (p *PushManager) GetTaskStatusOfPushes(models []*PushModel) error {
 			if _, ok := m[t.UserIdentifier]; ok {
 				m[t.UserIdentifier].Status = t.Status
 				m[t.UserIdentifier].DeliverTime = t.LastExecutionTime
+				m[t.UserIdentifier].DeliverTimeUnix = t.LastExecutionTime.Unix()
 			}
 		}
 	}

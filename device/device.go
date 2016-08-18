@@ -1,7 +1,13 @@
 package device
 
+import (
+	"fmt"
+)
+
 var (
 	GlobalDeviceMapper DeviceMapper
+
+	ErrDeviceNotFound = fmt.Errorf("device not found")
 )
 
 type Device struct {
