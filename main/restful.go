@@ -139,6 +139,7 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 
 		SwaggerPath:     "/apidocs/",
 		SwaggerFilePath: env.Config.HttpServer.SwaggerPath}
+    log4go.Info("loaded swagger in %v, path is /apidocs/", env.Config.HttpServer.SwaggerPath)
 
 	swagger.RegisterSwaggerService(config, container)
 
