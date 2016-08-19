@@ -12,7 +12,7 @@
         "security_key": "AIzaSyBMK2JittPIQI489utC3QVIOE-VSa4djwk"
     },
     "http_server": {
-        "addr": ":8070",
+        "addr": "10.8.6.7:8070",
         "swappger_path": "/home/work/swagger-ui/dist"
     },
     "mysql": {
