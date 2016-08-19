@@ -16,6 +16,6 @@ then
     mkdir -p $CONF
 fi
 
-go build -o $BIN/$APP_NAME -a  main/main.go
+go build -o $BIN/$APP_NAME -a  main/main.go main/restful.go
 cp conf/* $CONF/
 cp bin/* $BIN/
