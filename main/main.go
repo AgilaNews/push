@@ -68,29 +68,31 @@ func main() {
 		done <- true
 	}()
 
-	notification := &fcm.Notification{
-		Tpl:     "2",
-		NewsId:  "quz2RgKCIpY=",
-		Title:   "Pinoy students win 5 medals in Romania math contest",
-		Digest:  "Agila",
-		Image:   "http://s1.agilanews.com/image/ZTqUvJtw6T0%3D.jpg?",
-		Options: fcm.NewNotificationDefaultOptions(),
-	}
+	/*
+		notification := &fcm.Notification{
+			Tpl:     "2",
+			NewsId:  "quz2RgKCIpY=",
+			Title:   "Pinoy students win 5 medals in Romania math contest",
+			Digest:  "Agila",
+			Image:   "http://s1.agilanews.com/image/ZTqUvJtw6T0%3D.jpg?",
+			Options: fcm.NewNotificationDefaultOptions(),
+		}
 
-	t := time.Now().Add(time.Second * 15)
+		t := time.Now().Add(time.Second * 15)
 
-	if model, err := fcm.GlobalPushManager.NewPushMessage(t, fcm.PUSH_ALL, nil, notification); err != nil {
-		log4go.Warn("add notify error : %v", err)
-	} else {
-		fcm.GlobalPushManager.FirePushTask(model.ID)
+		if model, err := fcm.GlobalPushManager.NewPushMessage(t, fcm.PUSH_ALL, nil, notification); err != nil {
+			log4go.Warn("add notify error : %v", err)
+		} else {
+			fcm.GlobalPushManager.FirePushTask(model.ID)
 
-		go func() {
-			time.Sleep(time.Second * 3)
-			if err := fcm.GlobalPushManager.CancelPush(model.ID); err != nil {
-				log4go.Warn("cancel task error :%v", err)
-			}
-		}()
-	}
+			go func() {
+				time.Sleep(time.Second * 3)
+				if err := fcm.GlobalPushManager.CancelPush(model.ID); err != nil {
+					log4go.Warn("cancel task error :%v", err)
+				}
+			}()
+		}
+	*/
 
 OUTFOR:
 	for {
