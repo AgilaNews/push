@@ -19,3 +19,4 @@ fi
 go build -o $BIN/$APP_NAME -a  main/main.go main/restful.go
 cp conf/* $CONF/
 cp bin/* $BIN/
+cp -r swagger-ui $OUTPUT/
