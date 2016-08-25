@@ -65,20 +65,19 @@ func WriteJsonError(r *restful.Response, status, code int, message string) {
 	r.WriteHeaderAndJson(status, e, restful.MIME_JSON)
 }
 
+func CorsFilter(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
+	resp.AddHeader(restful.HEADER_AccessControlAllowOrigin, "*")
+	resp.AddHeader(restful.HEADER_AccessControlRequestMethod, "GET,PUT,POST,DELETE,OPTIONS")
+	chain.ProcessFilter(req, resp)
+}
+
 func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error) {
 	container := restful.NewContainer()
 
-	cors := restful.CrossOriginResourceSharing{
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
-		AllowedDomains: []string{"localhost"},
-	}
-
-	container.Filter(cors.Filter)
-
 	ws := new(restful.WebService)
 	ws.Path("/push").
-		Doc("push management").
-		Consumes(restful.MIME_JSON).
+		Doc("push management")
+		Consumes(restful.MIME_JSON, "text/plain").
 		Produces(restful.MIME_JSON)
 
 	ws.Route(ws.GET("/").To(getAllPushMessage).
@@ -96,11 +95,21 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		Returns(400, "parameter error", nil),
 	)
 
+	ws.Route(ws.GET("/detail/{push-id}").To(getPush).
+		Doc("get task detail by id").
+		Param(ws.PathParameter("push-id", "push id").DataType("int").Required(true)).
+		Writes(fcm.PushModel{}).
+		Returns(500, "internal error", nil).
+		Returns(400, "parameter error", nil).
+		Returns(404, "task not found", nil),
+	)
+
 	ws.Route(ws.DELETE("/detail/{push-id}").To(cancelPush).
 		Doc("cancel task").
 		Writes(JsonResponse{}).
 		Returns(500, "internal error", nil).
-		Returns(400, "parameter error", nil),
+		Returns(400, "parameter error", nil).
+		Returns(404, "task not found", nil),
 	)
 
 	ws.Route(ws.POST("/detail/{push-id}").To(updatePush).
@@ -108,7 +117,8 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		Reads(PushForm{}).
 		Writes(fcm.PushModel{}).
 		Returns(500, "internal error", nil).
-		Returns(400, "parameter error", nil),
+		Returns(400, "parameter error", nil).
+		Returns(404, "task not found", nil),
 	)
 
 	ws.Route(ws.PUT("/detail/{push-id}").To(firePush).
@@ -116,12 +126,14 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		Param(ws.PathParameter("push-id", "push id got from the list").DataType("int").Required(true)).
 		Writes(JsonResponse{}).
 		Returns(500, "internal error", nil).
+		Returns(404, "task not found", nil).
 		Returns(400, "parameter error", nil).
 		Returns(409, "invalid task status", nil),
 	)
 
-	container.Add(ws)
+	ws = ws.Filter(CorsFilter)
 
+	container.Add(ws)
 	ws = new(restful.WebService)
 	ws.Path("/device/").
 		Doc("device management").
@@ -139,7 +151,9 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 
 		SwaggerPath:     "/apidocs/",
 		SwaggerFilePath: env.Config.HttpServer.SwaggerPath}
-    log4go.Info("loaded swagger in %v, path is /apidocs/", env.Config.HttpServer.SwaggerPath)
+	log4go.Info("loaded swagger in %v, path is /apidocs/", env.Config.HttpServer.SwaggerPath)
+
+	container.Add(ws)
 
 	swagger.RegisterSwaggerService(config, container)
 
@@ -221,7 +235,7 @@ func getAllPushMessage(request *restful.Request, response *restful.Response) {
 	}
 
 	start := 0
-	length := 2
+	length := 10
 
 	if len(start_str) > 0 {
 		if start, err = strconv.Atoi(start_str); err != nil {
@@ -229,7 +243,8 @@ func getAllPushMessage(request *restful.Request, response *restful.Response) {
 			return
 		}
 		if start < 0 {
-			start = 0
+			WriteJsonError(response, 400, ERR_PARAM, "start must greater than 0")
+			return
 		}
 	}
 
@@ -238,8 +253,9 @@ func getAllPushMessage(request *restful.Request, response *restful.Response) {
 			WriteJsonError(response, 400, ERR_PARAM, "ps error")
 			return
 		}
-		if length < 0 {
-			length = 2
+		if length < 1 {
+			WriteJsonError(response, 400, ERR_PARAM, "length must greater than 1")
+			return
 		}
 	}
 
@@ -281,6 +297,26 @@ func updatePush(request *restful.Request, response *restful.Response) {
 	if model, err := fcm.GlobalPushManager.UpdatePush(push_id, time.Unix(form.PlanTime, 0), form.Condition, notification); err != nil {
 		WriteJsonError(response, 500, ERR_INTERNAL, fmt.Sprintf("update error : %v", err))
 		log4go.Global.Warn("update push task error: %v", err)
+	} else {
+		WriteJsonSuccess(response, model)
+	}
+}
+
+func getPush(request *restful.Request, response *restful.Response) {
+	var push_id int
+	var err error
+
+	if push_id, err = strconv.Atoi(request.PathParameter("push-id")); err != nil {
+		WriteJsonError(response, 400, ERR_PARAM, "push-id must be int")
+		return
+	}
+
+	if model, err := fcm.GlobalPushManager.GetPush(push_id); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			WriteJsonError(response, 404, ERR_NON_EXISTS, "push not found")
+		} else {
+			WriteJsonError(response, 500, ERR_INTERNAL, fmt.Sprintf("fire push error: %v", err))
+		}
 	} else {
 		WriteJsonSuccess(response, model)
 	}

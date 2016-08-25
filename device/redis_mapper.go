@@ -82,10 +82,14 @@ func (dm *RedisDeviceMapper) GetDevicesById(device_ids []string) ([]*Device, err
 		for idx, v := range values {
 			device := &Device{}
 
-			if err := json.Unmarshal([]byte(v.(string)), device); err != nil {
+			if v == nil {
 				ret[idx] = nil
 			} else {
-				ret[idx] = device
+				if err := json.Unmarshal([]byte(v.(string)), device); err != nil {
+					ret[idx] = nil
+				} else {
+					ret[idx] = device
+				}
 			}
 		}
 	}

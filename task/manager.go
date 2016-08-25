@@ -16,6 +16,7 @@ const (
 
 	TASK_SOURCE_PUSH = TaskSource(0)
 
+	STATUS_UNKNOWN = TaskStatus(-1)
 	STATUS_INIT    = TaskStatus(0) //init but may editing
 	STATUS_PENDING = TaskStatus(1) //added to pending Queue
 	STATUS_EXEC    = TaskStatus(2)

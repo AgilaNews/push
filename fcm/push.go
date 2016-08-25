@@ -110,9 +110,15 @@ func (m *PushModel) BeforeCreate() error {
 	t, _ = json.Marshal(m.Condition)
 	m.ConditionStr = string(t)
 
+	m.CreatedAt = time.Now()
+	m.UpdatedAt = time.Now()
+	m.CanceledAt = time.Time{}
+	m.DeliverTime = time.Time{}
+
 	m.CreatedAtUnix = m.CreatedAt.Unix()
 	m.UpdatedAtUnix = m.UpdatedAt.Unix()
 	m.DeliverTimeUnix = m.DeliverTime.Unix()
+
 	m.PlanTimeUnix = m.PlanTime.Unix()
 	m.CanceledAtUnix = m.CanceledAt.Unix()
 	return nil
@@ -124,6 +130,8 @@ func (m *PushModel) BeforeUpdate() error {
 	m.OptionStr = string(t)
 	t, _ = json.Marshal(m.Condition)
 	m.ConditionStr = string(t)
+
+	m.UpdatedAt = time.Now()
 
 	m.CreatedAtUnix = m.CreatedAt.Unix()
 	m.UpdatedAtUnix = m.UpdatedAt.Unix()
@@ -153,8 +161,8 @@ func (m *PushModel) AfterFind() error {
 	m.CreatedAtUnix = m.CreatedAt.Unix()
 	m.UpdatedAtUnix = m.UpdatedAt.Unix()
 	m.CanceledAtUnix = m.CanceledAt.Unix()
-
 	m.PlanTimeUnix = m.PlanTime.Unix()
+	m.DeliverTimeUnix = m.DeliverTime.Unix()
 
 	return nil
 }
@@ -231,7 +239,9 @@ func (p *PushManager) InstantMulticast(device_ids []string, notification *Notifi
 		return err
 	} else {
 		for _, device := range devices {
-			GlobalAppServer.PushNotificationToDevice(device, notification)
+			if device != nil {
+				GlobalAppServer.PushNotificationToDevice(device, notification)
+			}
 		}
 	}
 	return nil
@@ -351,7 +361,11 @@ func (p *PushManager) GetPush(id int) (*PushModel, error) {
 	if err := p.rdb.First(pushModel, id).Error; err != nil {
 		return nil, err
 	} else {
-		return pushModel, nil
+		if err = p.getTaskStatusOfPushes([]*PushModel{pushModel}); err != nil {
+			return nil, err
+		} else {
+			return pushModel, nil
+		}
 	}
 }
 
@@ -408,11 +422,17 @@ func (p *PushManager) getTaskStatusOfPushes(models []*PushModel) error {
 		return err
 	} else {
 		for _, t := range tasks {
+			log4go.Debug("task %v", t)
 			if _, ok := m[t.UserIdentifier]; ok {
 				m[t.UserIdentifier].Status = t.Status
 				m[t.UserIdentifier].DeliverTime = t.LastExecutionTime
 				m[t.UserIdentifier].DeliverTimeUnix = t.LastExecutionTime.Unix()
+				delete(m, t.UserIdentifier)
 			}
+		}
+
+		for _, pushModel := range m {
+			pushModel.Status = task.STATUS_INIT
 		}
 	}
 

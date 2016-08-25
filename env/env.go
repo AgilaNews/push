@@ -150,6 +150,10 @@ func Init() error {
 	}
 
 	Wdb.AutoMigrate(&fcm.PushModel{}, &task.Task{})
+	if err := Wdb.Model(&task.Task{}).AddUniqueIndex("idx_source_and_uid", "source", "uid").Error; err != nil {
+		return err
+	}
+
 	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
 		log4go.Global.Error("init read db error")
 		return err
