@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
+	"os"
 	"push/device"
 	"push/env"
 	"push/fcm"
@@ -48,7 +50,6 @@ type PushListResponse struct {
 }
 
 func WriteJsonSuccess(r *restful.Response, c interface{}) {
-
 	if c == nil {
 		c = JsonResponse{Message: "ok"}
 	}
@@ -65,19 +66,13 @@ func WriteJsonError(r *restful.Response, status, code int, message string) {
 	r.WriteHeaderAndJson(status, e, restful.MIME_JSON)
 }
 
-func CorsFilter(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
-	resp.AddHeader(restful.HEADER_AccessControlAllowOrigin, "*")
-	resp.AddHeader(restful.HEADER_AccessControlRequestMethod, "GET,PUT,POST,DELETE,OPTIONS")
-	chain.ProcessFilter(req, resp)
-}
-
 func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error) {
-	container := restful.NewContainer()
-
+	restful.TraceLogger(log.New(os.Stdout, "[restful] ", log.LstdFlags|log.Lshortfile))
 	ws := new(restful.WebService)
+
 	ws.Path("/push").
-		Doc("push management")
-		Consumes(restful.MIME_JSON, "text/plain").
+		Doc("push management").
+		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
 
 	ws.Route(ws.GET("/").To(getAllPushMessage).
@@ -122,6 +117,7 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 	)
 
 	ws.Route(ws.PUT("/detail/{push-id}").To(firePush).
+		Consumes().
 		Doc("fired push message").
 		Param(ws.PathParameter("push-id", "push id got from the list").DataType("int").Required(true)).
 		Writes(JsonResponse{}).
@@ -131,21 +127,35 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		Returns(409, "invalid task status", nil),
 	)
 
-	ws = ws.Filter(CorsFilter)
+	restful.Add(ws)
 
-	container.Add(ws)
-	ws = new(restful.WebService)
-	ws.Path("/device/").
-		Doc("device management").
-		Consumes("restful.MIME_JSON").
-		Produces("restful.MIME_JSON")
+	cors := restful.CrossOriginResourceSharing{
+		AllowedHeaders: []string{"Content-Type"},
+		AllowedDomains: env.Config.HttpServer.AllowedDomains,
+		AllowedMethods: []string{"GET", "PUT", "POST", "DELETE", "OPTIONS"},
+		Container:      restful.DefaultContainer,
+	}
 
-	ws.Route(ws.GET("/{device-id}").To(getDevice).
-		Doc("get device by did").
-		Writes(device.Device{}))
+	restful.Filter(cors.Filter)
+	restful.Filter(restful.OPTIONSFilter())
 
+	//container.Filter(cors.Filter)
+	/*
+	   	ws = new(restful.WebService)
+	   	ws.Path("/device/").
+	   		Doc("device management").
+	   		Consumes("restful.MIME_JSON").
+	   		Produces("restful.MIME_JSON")
+
+	   	ws.Route(ws.GET("/{device-id}").To(getDevice).
+	   		Doc("get device by did").
+	   		Writes(device.Device{}))
+
+
+	       container.Filter(cors.Filter)
+	*/
 	config := swagger.Config{
-		WebServices:    container.RegisteredWebServices(),
+		WebServices:    restful.RegisteredWebServices(),
 		WebServicesUrl: "http://" + env.Config.HttpServer.Addr,
 		ApiPath:        "/apidocs.json/",
 
@@ -153,9 +163,7 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		SwaggerFilePath: env.Config.HttpServer.SwaggerPath}
 	log4go.Info("loaded swagger in %v, path is /apidocs/", env.Config.HttpServer.SwaggerPath)
 
-	container.Add(ws)
-
-	swagger.RegisterSwaggerService(config, container)
+	swagger.RegisterSwaggerService(config, restful.DefaultContainer)
 
 	laddr, err := net.ResolveTCPAddr("tcp", Addr)
 	if nil != err {
@@ -167,7 +175,7 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		return nil, nil, err
 	}
 
-	return listener, container, nil
+	return listener, restful.DefaultContainer, nil
 
 }
 
@@ -396,6 +404,10 @@ func newPush(request *restful.Request, response *restful.Response) {
 			WriteJsonSuccess(response, nil)
 		}
 	} else {
+		if form.Condition == nil || len(form.Condition.Platform) == 0 {
+			WriteJsonError(response, 500, ERR_PARAM, fmt.Sprintf("please set platform condition"))
+			return
+		}
 		if model, err := fcm.GlobalPushManager.NewPushMessage(time.Unix(form.PlanTime, 0),
 			form.DeliverType, form.Condition, notification); err != nil {
 			WriteJsonError(response, 500, ERR_INTERNAL, fmt.Sprintf("update error : %v", err))

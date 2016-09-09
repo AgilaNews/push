@@ -165,7 +165,7 @@ func (c *httpGcmClient) send(apiKey string, m HttpMessage) (*HttpResponse, error
 	if err != nil {
 		return gcmResp, fmt.Errorf("error unmarshaling json from body: %v", err)
 	}
-	// TODO(silvano): this is assuming that the header contains seconds instead of a date, need to check
+
 	c.retryAfter = httpResp.Header.Get(http.CanonicalHeaderKey("Retry-After"))
 	return gcmResp, nil
 }
@@ -340,9 +340,11 @@ func (c *XmppGcmClient) reply(m XmppMessage) {
 }
 
 func (c *XmppGcmClient) Send(m XmppMessage) (string, int, error) {
+	log4go.Global.Info("%v", m)
 	if m.MessageId == "" {
 		m.MessageId = uuid.New()
 	}
+
 	c.messages.Lock.Lock()
 	for len(c.messages.m) >= unackThreshold {
 		log4go.Global.Info("[FCTR]")

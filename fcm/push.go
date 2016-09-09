@@ -18,8 +18,14 @@ const (
 	PUSH_ALL       = PushType(1)
 	PUSH_MULTICAST = PushType(2)
 
-	PUSH_MIN_VERSION = "v1.1.5"
-	BROAD_BROADCAST  = "android_%v"
+	PUSH_MIN_VERSION = "1.1.5"
+
+	PLATFORM_ALL     = "all"
+	PLATFORM_ANDROID = "android"
+	PLATFORM_IOS     = "ios"
+
+	IOS_PUBLISHED     = 0x2
+	ANDROID_PUBLISHED = 0x1
 )
 
 type PushType int
@@ -28,12 +34,14 @@ type ClientVersion struct {
 	ID            string `gorm:"column:id;primary_key;" json:"-"`
 	Version       string `gorm:"column:client_version;type:varchar(16);" json:"client_version"`
 	ServerVersion string `gorm:"column:server_version;type:int(11);" json:"-"`
+	Status        int    `gorm:"column:status;type:tinyint(3);json:"-""`
 }
 
 type PushCondition struct {
 	Devices    []string `json:"devices"`
 	MinVersion string   `json:"min_version"`
 	OS         string   `json:"os"`
+	Platform   string   `json:"platform"`
 	//	LocalTimeZone string   `json:"local_time_zone"`
 }
 
@@ -84,9 +92,10 @@ type Notification struct {
 }
 
 type NotificationOptions struct {
-	Priority         string              `json:"priority"`
-	DelayWhileIdle   *bool               `json:"delay_while_idle"`
-	TTL              *int                `json:"ttl"`
+	Priority       string `json:"priority"`
+	DelayWhileIdle *bool  `json:"delay_while_idle"`
+	TTL            *int   `json:"ttl"`
+	//	ContentAvaliable *bool               `json:"content_avaliable"`
 	OnReceiptHandler *func(token string) `json:"-"` //only take effect when you send to certain device
 }
 
@@ -198,21 +207,18 @@ func (pushManager *PushManager) DoTask(push_id_str string, context interface{}) 
 	push := context.(*PushModel)
 	log4go.Info("handle push task at [%v] of push [%v]", time.Now(), push_id_str)
 
+	notification := push.getNotification()
+
 	switch push.DeliverType {
 	case PUSH_ALL:
-		notification := push.getNotification()
 		if topics, err := pushManager.getTopics(push.Condition); err != nil {
-			log4go.Warn("get push error : %v", err)
+			log4go.Warn("get topic error :%v", err)
 		} else {
 			for _, topic := range topics {
-				GlobalAppServer.BroadcastNotificationToTopic(topic, notification)
-				log4go.Info("send to topic [%v]", topic)
+				GlobalAppServer.BroadcastNotification(topic, notification)
 			}
-
 		}
-
 	case PUSH_MULTICAST:
-		notification := push.getNotification()
 		notification.PushId = 1
 		///check push model validation
 		if err := pushManager.InstantMulticast(push.Condition.Devices, notification); err != nil {
@@ -251,6 +257,7 @@ func (p *PushManager) NewPushMessage(at time.Time, deliver_type PushType, condit
 	pushModel := notification.getPushModel()
 	pushModel.PlanTime = at
 	pushModel.DeliverType = deliver_type
+	pushModel.Condition = condition
 
 	if err := p.wdb.Create(&pushModel).Error; err != nil {
 		return nil, err
@@ -440,15 +447,16 @@ func (p *PushManager) getTaskStatusOfPushes(models []*PushModel) error {
 }
 
 func (p *PushManager) getTopics(condition *PushCondition) ([]string, error) {
+	log4go.Debug("get topics of condition %v", condition)
 	var versions []ClientVersion
 	if err := p.rdb.Find(&versions).Error; err != nil {
 		return nil, err
 	}
 
-	topics := make([]string, 0)
-
+	var topics []string
 	var minV string
-	if nil == condition {
+
+	if nil == condition || len(condition.MinVersion) == 0 {
 		minV = version.Normalize(PUSH_MIN_VERSION)
 	} else {
 		minV = condition.MinVersion
@@ -456,7 +464,15 @@ func (p *PushManager) getTopics(condition *PushCondition) ([]string, error) {
 
 	for _, versionModel := range versions {
 		if version.Compare(versionModel.Version, minV, ">=") {
-			topics = append(topics, fmt.Sprintf(BROAD_BROADCAST, versionModel.Version))
+			if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_IOS) && (versionModel.Status&IOS_PUBLISHED != 0) {
+				log4go.Debug("version %v, status %v, added to ios", versionModel.Version, versionModel.Status)
+				topics = append(topics, fmt.Sprintf("ios_v%s", versionModel.Version))
+			}
+
+			if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_ANDROID) && (versionModel.Status&ANDROID_PUBLISHED != 0) {
+				log4go.Debug("version %v, status %v, added to android", versionModel.Version, versionModel.Status)
+				topics = append(topics, fmt.Sprintf("android_v%s", versionModel.Version))
+			}
 		}
 	}
 

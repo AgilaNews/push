@@ -1,19 +1,19 @@
 {
     "log": {
-        "path": "/data/logs/fcm_app_server/fcm_app_server.log",
+        "path": "./fcm_app_server.log",
         "level": "DEBUG",
         "console": true
     },
     "redis": {
-        "addr": "10.8.6.7:6379"
+        "addr": "10.8.14.136:6379"
     },
     "app_server": {
         "sender_id": "1066815885426",
         "security_key": "AIzaSyBMK2JittPIQI489utC3QVIOE-VSa4djwk"
     },
     "http_server": {
-        "addr": "192.168.31.200:8070",
-        "swagger_path": "swagger-ui/dist"
+        "addr": ":8075",
+        "swagger_path": "/home/work/fcm_app_server/swagger-ui/dist"
     },
     "mysql": {
         "read": {

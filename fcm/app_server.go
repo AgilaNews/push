@@ -13,8 +13,11 @@ import (
 )
 
 const (
-	HIGH_PRIORITY     = "high"
-	NORMAL_PRIORITY   = "normal"
+	HIGH_PRIORITY   = "high"
+	NORMAL_PRIORITY = "normal"
+
+	SOUND_DEFAULT = "default"
+
 	NOTIFICATION_TYPE = "1"
 	CONFIRM_TYPE      = "2"
 	REREGISTER_TYPE   = "3"
@@ -136,34 +139,21 @@ func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notific
 	return nil
 }
 
-func (appServer *AppServer) BroadcastNotificationToTopic(topic string, notification *Notification) error {
-	msg := getXmppMessageFromNotification(notification)
+func (appServer *AppServer) BroadcastNotification(topic string, notification *Notification) error {
+	var msg *gcm.XmppMessage
+
+	if strings.HasPrefix(topic, PLATFORM_IOS) {
+		msg = getXmppMessageFromNotificationForIos(notification)
+	} else if strings.HasPrefix(topic, PLATFORM_ANDROID) {
+		msg = getXmppMessageFromNotification(notification)
+	} else {
+		return fmt.Errorf("unknown platform %s", topic)
+	}
+
 	msg.To = fmt.Sprintf("/topics/%s", topic)
 
 	go appServer.client.Send(*msg)
 	return nil
-}
-
-func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {
-	msg_id := genMessageId()
-
-	return &gcm.XmppMessage{
-		MessageId:                msg_id,
-		Priority:                 notification.Options.Priority,
-		DelayWhileIdle:           notification.Options.DelayWhileIdle,
-		TimeToLive:               notification.Options.TTL,
-		DeliveryReceiptRequested: &true_addr,
-		ContentAvailable:         &true_addr,
-		Data: gcm.Data{
-			"type":    NOTIFICATION_TYPE,
-			"push_id": notification.PushId,
-			"tpl":     notification.Tpl,
-			"title":   notification.Title,
-			"digest":  notification.Digest,
-			"img":     notification.Image,
-			"news_id": notification.NewsId,
-		},
-	}
 }
 
 func (appServer *AppServer) Stop() {
@@ -172,8 +162,6 @@ func (appServer *AppServer) Stop() {
 }
 
 func (appServer *AppServer) Work() {
-	log4go.Global.Info("app server starts")
-
 OUTFOR:
 	for {
 		if err := appServer.client.Listen(gcm.MessageHandler{
@@ -185,6 +173,7 @@ OUTFOR:
 		}); err != nil {
 			log4go.Global.Warn("listen to gcm error: %v", err)
 		}
+		log4go.Global.Info("app server starts")
 
 		select {
 		case <-appServer.stop:
@@ -269,5 +258,50 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 		}
 	default:
 		log4go.Global.Warn("unknown type %v", t)
+	}
+}
+
+func getXmppMessageFromNotificationForIos(notification *Notification) *gcm.XmppMessage {
+	msg_id := genMessageId()
+
+	return &gcm.XmppMessage{
+		MessageId:                msg_id,
+		Priority:                 notification.Options.Priority,
+		DelayWhileIdle:           notification.Options.DelayWhileIdle,
+		TimeToLive:               notification.Options.TTL,
+		DeliveryReceiptRequested: &true_addr,
+		CollapseKey:              strconv.Itoa(notification.PushId),
+		ContentAvailable:         &true_addr,
+		Notification: &gcm.Notification{
+			Body:  notification.Title,
+			Sound: SOUND_DEFAULT,
+			Badge: "1",
+		},
+		Data: gcm.Data{
+			"push_id": notification.PushId,
+			"news_id": notification.NewsId,
+		},
+	}
+}
+
+func getXmppMessageFromNotification(notification *Notification) *gcm.XmppMessage {
+	msg_id := genMessageId()
+
+	return &gcm.XmppMessage{
+		MessageId:                msg_id,
+		Priority:                 notification.Options.Priority,
+		DelayWhileIdle:           notification.Options.DelayWhileIdle,
+		TimeToLive:               notification.Options.TTL,
+		DeliveryReceiptRequested: &true_addr,
+		ContentAvailable:         &true_addr,
+		Data: gcm.Data{
+			"type":    NOTIFICATION_TYPE,
+			"push_id": notification.PushId,
+			"tpl":     notification.Tpl,
+			"title":   notification.Title,
+			"digest":  notification.Digest,
+			"img":     notification.Image,
+			"news_id": notification.NewsId,
+		},
 	}
 }
