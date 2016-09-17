@@ -1,6 +1,6 @@
 {
     "log": {
-        "path": "/data/logs/fcm_app_server/fcm_app_server.log",
+        "path": "./fcm_app_server.log",
         "level": "DEBUG",
         "console": true
     },
@@ -12,7 +12,7 @@
         "security_key": "AIzaSyBMK2JittPIQI489utC3QVIOE-VSa4djwk"
     },
     "http_server": {
-        "addr": "192.168.31.200:8070",
+        "addr": ":8075",
         "swagger_path": "/home/work/fcm_app_server/swagger-ui/dist"
     },
     "mysql": {
