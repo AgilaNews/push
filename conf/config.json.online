@@ -13,7 +13,7 @@
     },
     "http_server": {
         "addr": ":8070",
-        "swagger_path": "/home/work/fcm_app_server/swagger-ui/dist"
+        "swagger_path": "/home/work/swagger-ui/dist"
     },
     "mysql": {
         "read": {
