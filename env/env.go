@@ -101,6 +101,7 @@ func Init() error {
 	case "sandbox":
 		conffile = "config.json.sandbox"
 	default:
+        value = "online"
 		conffile = "config.json.online"
 	}
 	conffile = "./conf/" + conffile
