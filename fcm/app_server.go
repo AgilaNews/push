@@ -126,7 +126,14 @@ func (appServer *AppServer) ConfirmRegistration(device *device.Device, msg_id st
 }
 
 func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notification *Notification) error {
-	msg := getXmppMessageFromNotification(notification)
+	var msg *gcm.XmppMessage
+
+	if dev.Os == PLATFORM_IOS {
+		msg = getXmppMessageFromNotificationForIos(notification)
+	} else {
+		msg = getXmppMessageFromNotification(notification)
+	}
+
 	msg.To = dev.Token
 
 	t := dev.Token
@@ -278,6 +285,8 @@ func getXmppMessageFromNotificationForIos(notification *Notification) *gcm.XmppM
 			Badge: "1",
 		},
 		Data: gcm.Data{
+			"type":    NOTIFICATION_TYPE,
+			"tpl":     notification.Tpl,
 			"push_id": notification.PushId,
 			"news_id": notification.NewsId,
 		},

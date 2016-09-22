@@ -139,21 +139,6 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 	restful.Filter(cors.Filter)
 	restful.Filter(restful.OPTIONSFilter())
 
-	//container.Filter(cors.Filter)
-	/*
-	   	ws = new(restful.WebService)
-	   	ws.Path("/device/").
-	   		Doc("device management").
-	   		Consumes("restful.MIME_JSON").
-	   		Produces("restful.MIME_JSON")
-
-	   	ws.Route(ws.GET("/{device-id}").To(getDevice).
-	   		Doc("get device by did").
-	   		Writes(device.Device{}))
-
-
-	       container.Filter(cors.Filter)
-	*/
 	config := swagger.Config{
 		WebServices:    restful.RegisteredWebServices(),
 		WebServicesUrl: "http://" + env.Config.HttpServer.Addr,
