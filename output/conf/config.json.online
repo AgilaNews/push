@@ -1,0 +1,36 @@
+{
+    "log": {
+        "path": "/data/logs/fcm_app_server/fcm_app_server.log",
+        "level": "INFO",
+        "console": false
+    },
+    "redis": {
+        "addr": "10.8.2.29:6379"
+    },
+    "app_server": {
+        "sender_id": "759516127227",
+        "security_key": "AIzaSyDVISzLzFTG8qgasug3BM_cDgw-mtkj0u0"
+    },
+    "http_server": {
+        "addr": ":8070",
+        "swagger_path": "/home/work/fcm_app_server/swagger-ui/dist"
+    },
+    "mysql": {
+        "read": {
+                "host": "10.8.31.41",
+                "port": 3306,
+                "db": "banews",
+                "user": "banews_r",
+                "password": "MhxzKhlHappy",
+                "pool": 30
+                },              
+        "write": {
+                "host": "10.8.22.123",
+                "port": 3306,
+                "db": "banews",
+                "user": "root",
+                "password": "MhxzKhl-Happy",
+                "pool": 10
+                }
+    }
+}
