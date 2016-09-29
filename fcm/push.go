@@ -121,8 +121,8 @@ func (m *PushModel) BeforeCreate() error {
 
 	m.CreatedAt = time.Now()
 	m.UpdatedAt = time.Now()
-	m.CanceledAt = time.Time{}
-	m.DeliverTime = time.Time{}
+	m.CanceledAt = time.Unix(0, 0)
+	m.DeliverTime = time.Unix(0, 0)
 
 	m.CreatedAtUnix = m.CreatedAt.Unix()
 	m.UpdatedAtUnix = m.UpdatedAt.Unix()
