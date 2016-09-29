@@ -46,7 +46,7 @@ type PushCondition struct {
 }
 
 type PushModel struct {
-	ID             uint      `gorm:"column:id;primary_key" json:"id"`
+	ID             uint      `gorm:"column:id;primary_key" json:"push_id"`
 	CreatedAt      time.Time `gorm:"column:created_at" json:"-"`
 	CreatedAtUnix  int64     `gorm:"-" json:"created_at"`
 	UpdatedAt      time.Time `gorm:"column:updated_at" json:"-"`
