@@ -22,7 +22,6 @@
                 "db": "banews",
                 "user": "root",
                 "password": "MhxzKhl-Happy",
-                "pool": 10
                 "pool": 30
                 },              
         "write": {
