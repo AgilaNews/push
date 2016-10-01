@@ -6,12 +6,13 @@ import (
 	"log"
 	"net"
 	"os"
-	"push/device"
-	"push/env"
-	"push/fcm"
-	"push/task"
 	"strconv"
 	"time"
+
+	"github.com/AgilaNews/push/device"
+	"github.com/AgilaNews/push/env"
+	"github.com/AgilaNews/push/fcm"
+	"github.com/AgilaNews/push/task"
 
 	"github.com/alecthomas/log4go"
 	"github.com/emicklei/go-restful"

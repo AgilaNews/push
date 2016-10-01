@@ -3,10 +3,11 @@ package fcm
 import (
 	"encoding/json"
 	"fmt"
-	"push/device"
-	"push/task"
 	"strconv"
 	"time"
+
+	"github.com/AgilaNews/push/device"
+	"github.com/AgilaNews/push/task"
 
 	"github.com/alecthomas/log4go"
 	"github.com/jinzhu/gorm"
@@ -76,7 +77,7 @@ type PushModel struct {
 
 	//from task, we don't use foreign keys because it introducd unnesscary complex
 	Status          task.TaskStatus `gorm:"-" json:"status"`
-	DeliverTime     time.Time       `gorm:"-" json:"-"`
+	DeliverTime     time.Time       `gorm:"deliver_time" json:"-"`
 	DeliverTimeUnix int64           `grom:"-" json:"deliver_time"`
 }
 

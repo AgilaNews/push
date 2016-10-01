@@ -2,12 +2,12 @@ package fcm
 
 import (
 	"fmt"
-	"push/device"
-	"push/gcm"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/AgilaNews/push/device"
+	"github.com/AgilaNews/push/gcm"
 	"github.com/alecthomas/log4go"
 	"github.com/satori/go.uuid"
 )

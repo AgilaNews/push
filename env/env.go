@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"push/device"
-	"push/fcm"
-	"push/task"
+
 	"time"
 
+	"github.com/AgilaNews/push/device"
+	"github.com/AgilaNews/push/fcm"
+	"github.com/AgilaNews/push/task"
 	"github.com/alecthomas/log4go"
 
 	"github.com/jinzhu/gorm"
@@ -101,7 +102,7 @@ func Init() error {
 	case "sandbox":
 		conffile = "config.json.sandbox"
 	default:
-        value = "online"
+		value = "online"
 		conffile = "config.json.online"
 	}
 	conffile = "./conf/" + conffile

@@ -254,7 +254,6 @@ func (c *XmppGcmClient) Listen(h MessageHandler) error {
 
 			c.messages.Cond.Broadcast()
 			c.messages.Lock.Unlock()
-			log4go.Info("reconnect success, cleared map")
 			continue
 		}
 
@@ -333,14 +332,12 @@ func (c *XmppGcmClient) Listen(h MessageHandler) error {
 
 func (c *XmppGcmClient) reply(m XmppMessage) {
 	payload, err := formatStanza(m)
-	log4go.Global.Info("[RPLY][%s]", m.MessageId)
 	if err == nil {
 		c.XmppClient.SendOrg(payload)
 	}
 }
 
 func (c *XmppGcmClient) Send(m XmppMessage) (string, int, error) {
-	log4go.Global.Info("%v", m)
 	if m.MessageId == "" {
 		m.MessageId = uuid.New()
 	}
@@ -370,11 +367,10 @@ func (c *XmppGcmClient) Send(m XmppMessage) (string, int, error) {
 		to = to[:32]
 	}
 
-	log4go.Global.Debug("[%v]", payload)
+	log4go.Global.Info("Send: [%v]", payload)
 	for {
 		bytes, err := c.XmppClient.SendOrg(payload)
 		if err == nil {
-			log4go.Global.Info("[SND][to:%s][mid:%s][type:%s]", to, m.MessageId, m.MessageType)
 			return m.MessageId, bytes, err
 		} else {
 			log4go.Global.Warn("[SND_ERR][to:%s][mid:%s][type:%s]", to, m.MessageId, m.MessageType)

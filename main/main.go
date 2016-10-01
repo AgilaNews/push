@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"push/env"
-	"push/fcm"
-	"push/task"
 	"sync"
 
+	"github.com/AgilaNews/push/env"
+	"github.com/AgilaNews/push/fcm"
+	"github.com/AgilaNews/push/task"
 	"github.com/alecthomas/log4go"
 	"github.com/emicklei/go-restful"
 )
@@ -21,6 +21,7 @@ func main() {
 	var listener *net.TCPListener
 	var container *restful.Container
 
+	fmt.Println("starts")
 	if err = env.Init(); err != nil {
 		fmt.Println("init error : %v\n", err)
 		os.Exit(-1)
