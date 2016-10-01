@@ -21,7 +21,6 @@ func main() {
 	var listener *net.TCPListener
 	var container *restful.Container
 
-	fmt.Println("starts")
 	if err = env.Init(); err != nil {
 		fmt.Println("init error : %v\n", err)
 		os.Exit(-1)
