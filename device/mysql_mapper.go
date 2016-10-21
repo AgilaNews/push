@@ -3,6 +3,7 @@ package device
 import (
 	"fmt"
 
+	"github.com/alecthomas/log4go"
 	"github.com/jinzhu/gorm"
 )
 

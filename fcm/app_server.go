@@ -155,7 +155,6 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) erro
 		DelayWhileIdle:           &true_addr,
 		TimeToLive:               &default_ttl,
 		DeliveryReceiptRequested: &true_addr,
-		ContentAvailable:         &true_addr,
 		CollapseKey:              "notify",
 		ContentAvailable:         &true_addr,
 		Data: gcm.Data{
@@ -166,7 +165,7 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) erro
 
 	log4go.Global.Info("[NOTIFY][%v][%v][%s]", dev.DeviceId, dev.UserId, dev.Token)
 
-	go appServer.client.Send(msg)
+	go appServer.client.Send(*msg)
 	return nil
 }
 
