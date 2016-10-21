@@ -76,6 +76,7 @@ func (dm *MysqlDeviceMapper) GetDevicesById(device_ids []string) ([]*Device, err
 		log4go.Warn("read sql error: %v", ret.Error)
 		return nil, ret.Error
 	}
+	log4go.Debug("got [%d] from [%v]", len(devices), device_ids)
 
 	m := make(map[string]*Device)
 	for _, device := range devices {
