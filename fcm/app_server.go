@@ -148,13 +148,15 @@ func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notific
 }
 
 func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) error {
-	msg := gcm.XmppMessage{
+	msg := &gcm.XmppMessage{
 		To:                       dev.Token,
 		MessageId:                genMessageId(),
 		Priority:                 HIGH_PRIORITY,
 		DelayWhileIdle:           &true_addr,
 		TimeToLive:               &default_ttl,
 		DeliveryReceiptRequested: &true_addr,
+		ContentAvailable:         &true_addr,
+		CollapseKey:              "notify",
 		ContentAvailable:         &true_addr,
 		Data: gcm.Data{
 			"type":    NEW_COMMENT_TYPE,
