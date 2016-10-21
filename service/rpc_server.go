@@ -5,6 +5,7 @@ import (
 	"net"
 
 	pb "github.com/AgilaNews/comment/iface"
+	"github.com/alecthomas/log4go"
 	"google.golang.org/grpc"
 )
 
@@ -22,6 +23,7 @@ func NewCommentServer(addr string) (*CommentCallbackServer, error) {
 		return nil, fmt.Errorf("bind rpc %s server error", addr)
 	}
 
+	log4go.Info("bind rpc server : %s success", addr)
 	c.rpcServer = grpc.NewServer()
 
 	pb.RegisterCallbackServiceServer(c.rpcServer, &CommentCallbackService{})
