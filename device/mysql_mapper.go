@@ -72,7 +72,8 @@ func (dm *MysqlDeviceMapper) GetDevicesById(device_ids []string) ([]*Device, err
 	devices := []*Device{}
 	ret := []*Device{}
 
-	if ret := dm.Rdb.Where("device_id IN (?)", device_ids).Find(&devices); ret != nil {
+	if ret := dm.Rdb.Where("device_id IN (?)", device_ids).Find(&devices); ret.Error != nil {
+		log4go.Warn("read sql error: %v", ret.Error)
 		return nil, ret.Error
 	}
 
