@@ -72,7 +72,7 @@ func (dm *MysqlDeviceMapper) GetDevicesById(device_ids []string) ([]*Device, err
 	devices := []*Device{}
 	ret := []*Device{}
 
-	if ret := dm.Rdb.Where("device_id IN (?)", device_ids).First(&devices); ret != nil {
+	if ret := dm.Rdb.Where("device_id IN (?)", device_ids).Find(&devices); ret != nil {
 		return nil, ret.Error
 	}
 
