@@ -11,9 +11,9 @@ var (
 )
 
 type Device struct {
-	ID            string `gorm:"column:id;bigint(20);primary_key" json:"-"`
-	Token         string `gorm:"column:token;type:varchar(1024);index;not null" json:"token"`
-	UserId        string `gorm:"column:user_id;type:varchar(64);index;not null" json:"user_id"`
+	ID            string `gorm:"column:id;primary_key;" json:"-"`
+	Token         string `gorm:"column:token;type:varchar(1024);index;not null;" json:"token"`
+	UserId        string `gorm:"column:user_id;type:varchar(64);index;default:'';" json:"user_id"`
 	DeviceId      string `gorm:"column:device_id;type:varchar(64);index;not null" json:"device_id"`
 	ClientVersion string `gorm:"column:client_version;type:varchar(32);index;" json:"client_version"`
 	Imsi          string `gorm:"column:imsi;type:varchar(64);" json:"imsi"`
