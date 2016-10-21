@@ -15,6 +15,9 @@
         "addr": ":8075",
         "swagger_path": "/home/work/fcm_app_server/swagger-ui/dist"
     },
+    "rpc_server": {
+        "addr": ":6098"
+    },
     "mysql": {
         "read": {
                 "host": "127.0.0.1",
