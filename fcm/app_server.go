@@ -55,6 +55,7 @@ func (appServer *AppServer) onAck(msg *gcm.CcsMessage) {
 
 func (appServer *AppServer) onNAck(msg *gcm.CcsMessage) {
 	log4go.Global.Info("onNAck %v:%v", msg.MessageId, msg.Error)
+
 	if msg.Error == "DEVICE_UNREGISTERED" {
 		if d, err := device.GlobalDeviceMapper.GetDeviceByToken(msg.From); err == nil {
 			if d != nil {

@@ -29,13 +29,15 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 	log4go.Info("on received comment reply event: user:%v", req.Comment.RefComments[0])
 
 	c := req.Comment.RefComments[0]
-	if d, err := device.GlobalDeviceMapper.GetDeviceByUserId(c.UserId); err != nil {
+	if devices, err := device.GlobalDeviceMapper.GetDeviceByUserId(c.UserId); err != nil {
 		resp.Code = pb.GeneralResponse_INTERNAL_ERROR
 		resp.ErrorMsg = fmt.Sprintf("get device of %v error", c.UserId)
 		return resp, nil
 	} else {
-		log4go.Info("pushed notifications to [device:%v]", d)
-		fcm.GlobalAppServer.PushNewCommentAlertToDevice(d)
+		log4go.Info("pushed notifications to [device:%v]", devices)
+		for _, d := range devices {
+			fcm.GlobalAppServer.PushNewCommentAlertToDevice(d)
+		}
 	}
 
 	resp.Code = pb.GeneralResponse_NO_ERROR

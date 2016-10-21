@@ -30,6 +30,6 @@ type DeviceMapper interface {
 	GetDeviceByToken(token string) (*Device, error)
 	GetDeviceById(device_id string) (*Device, error)
 	GetDevicesById(device_ids []string) ([]*Device, error)
-	GetDeviceByUserId(user_id string) (*Device, error)
+	GetDeviceByUserId(user_id string) ([]*Device, error)
 	GetAllDevice() ([]*Device, error)
 }
