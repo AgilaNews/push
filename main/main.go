@@ -10,6 +10,7 @@ import (
 
 	"github.com/AgilaNews/push/env"
 	"github.com/AgilaNews/push/fcm"
+	"github.com/AgilaNews/push/service"
 	"github.com/AgilaNews/push/task"
 	"github.com/alecthomas/log4go"
 	"github.com/emicklei/go-restful"
@@ -20,6 +21,7 @@ func main() {
 	var wg sync.WaitGroup
 	var listener *net.TCPListener
 	var container *restful.Container
+	var rpcServer *service.CommentCallbackServer
 
 	if err = env.Init(); err != nil {
 		fmt.Println("init error : %v\n", err)
@@ -31,10 +33,15 @@ func main() {
 		os.Exit(-1)
 	}
 
+	if rpcServer, err = service.NewCommentServer(env.Config.RpcServer.Addr); err != nil {
+		fmt.Println("init rpc server error")
+		os.Exit(-1)
+	}
+
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
 
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		fcm.GlobalAppServer.Work()
@@ -60,6 +67,13 @@ func main() {
 		log4go.Info("http server stoped")
 	}()
 
+	go func() {
+		defer wg.Done()
+
+		rpcServer.Work()
+		log4go.Info("rpc server starts at: %v")
+	}()
+
 	done := make(chan bool)
 	go func() {
 		wg.Wait()
@@ -74,6 +88,7 @@ OUTFOR:
 			task.GlobalTaskManager.Stop()
 			fcm.GlobalAppServer.Stop()
 			listener.Close()
+			rpcServer.Stop()
 			log4go.Info("get interrupt, gracefull stop")
 		case <-done:
 			log4go.Info("all routine done, exit")

@@ -44,6 +44,9 @@ type Configuration struct {
 		SwaggerPath    string   `json:"swagger_path"`
 		AllowedDomains []string `json:"allow_domains"`
 	} `json:"http_server"`
+	RpcServer struct {
+		Addr string `json:"addr"`
+	} `json:"rpc_server"`
 	Mysql struct {
 		Read  MysqlConfiguration `json:"read"`
 		Write MysqlConfiguration `json:"write"`
@@ -133,10 +136,11 @@ func Init() error {
 
 	// init device mapper
 	// use full when you want to push to certain device
-	if device.GlobalDeviceMapper, err = device.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
-		log4go.Global.Info("init device mapper fail")
-		return err
-	}
+	/*
+		if device.GlobalDeviceMapper, err = device.NewRedisDeviceMapper(Config.Redis.Addr); err != nil {
+			log4go.Global.Info("init device mapper fail")
+			return err
+		}*/
 
 	if Config.Location == "" {
 		Location, err = time.LoadLocation(Config.Location)
@@ -152,13 +156,18 @@ func Init() error {
 		return err
 	}
 
-	Wdb.AutoMigrate(&fcm.PushModel{}, &task.Task{})
+	Wdb.AutoMigrate(&fcm.PushModel{}, &task.Task{}, &device.Device{})
 	if err := Wdb.Model(&task.Task{}).AddUniqueIndex("idx_source_and_uid", "source", "uid").Error; err != nil {
 		return err
 	}
 
 	if Rdb, err = Config.Mysql.Read.getConnection(); err != nil {
 		log4go.Global.Error("init read db error")
+		return err
+	}
+
+	if device.GlobalDeviceMapper, err = device.NewMysqlDeviceMapper(Rdb, Wdb); err != nil {
+		log4go.Global.Error("new mysql device mapper")
 		return err
 	}
 

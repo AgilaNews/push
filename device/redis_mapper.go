@@ -140,3 +140,7 @@ func (dm *RedisDeviceMapper) getDeviceFromRedis(key, id string) (*Device, error)
 	return nil, ErrDeviceNotFound
 
 }
+
+func GetDeviceByUserId(user_id string) ([]*Device, error) {
+	return nil, nil
+}

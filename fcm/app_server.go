@@ -21,6 +21,7 @@ const (
 	NOTIFICATION_TYPE = "1"
 	CONFIRM_TYPE      = "2"
 	REREGISTER_TYPE   = "3"
+	NEW_COMMENT_TYPE  = "4"
 
 	TPL_IMAGE_WITH_TEXT = "2"
 
@@ -141,6 +142,37 @@ func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notific
 		t = t[:32]
 	}
 	log4go.Global.Info("[NOTIFY][%v][%s]", dev.DeviceId, t)
+
+	go appServer.client.Send(*msg)
+	return nil
+}
+
+func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) error {
+	msg := gcm.XmppMessage{
+		To:                       dev.Token,
+		MessageId:                genMessageId(),
+		Priority:                 HIGH_PRIORITY,
+		DelayWhileIdle:           &true_addr,
+		TimeToLive:               &default_ttl,
+		DeliveryReceiptRequested: &true_addr,
+		ContentAvailable:         &true_addr,
+		Data: gcm.Data{
+			"type":    NEW_COMMENT_TYPE,
+			"user_id": dev.UserId,
+		},
+	}
+
+	log4go.Global.Info("[NOTIFY][%v][%v][%s]", dev.DeviceId, dev.UserId, dev.Token)
+
+	go appServer.client.Send(msg)
+	return nil
+}
+
+func (appServer *AppServer) BroadcastNotifications(topics []string, notification *Notification) error {
+	var msg *gcm.XmppMessage
+
+	msg = getXmppMessageFromNotificationForIos(notification)
+	msg.To = strings.Join(topics, "||")
 
 	go appServer.client.Send(*msg)
 	return nil

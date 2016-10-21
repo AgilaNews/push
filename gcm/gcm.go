@@ -143,7 +143,6 @@ func (c *httpGcmClient) send(apiKey string, m HttpMessage) (*HttpResponse, error
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling message>%v", err)
 	}
-	log4go.Global.Debug("sending", string(bs))
 	req, err := http.NewRequest("POST", c.GcmURL, bytes.NewReader(bs))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request>%v", err)
