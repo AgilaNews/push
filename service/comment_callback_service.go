@@ -34,8 +34,9 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 		resp.ErrorMsg = fmt.Sprintf("get device of %v error", c.UserId)
 		return resp, nil
 	} else {
-		log4go.Info("pushed notifications to [device:%v]", devices)
+		log4go.Info("pushed notifications to %d device", len(devices))
 		for _, d := range devices {
+			log4go.Info("push alert to [%s]", d.DeviceId)
 			fcm.GlobalAppServer.PushNewCommentAlertToDevice(d)
 		}
 	}

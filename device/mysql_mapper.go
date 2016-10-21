@@ -58,6 +58,7 @@ func (dm *MysqlDeviceMapper) GetDeviceById(device_id string) (*Device, error) {
 
 func (dm *MysqlDeviceMapper) GetDeviceByUserId(user_id string) ([]*Device, error) {
 	d := []*Device{}
+
 	if ret := dm.Rdb.Where("user_id = ?", user_id).Find(&d); ret.Error != nil {
 		if ret.RecordNotFound() {
 			return nil, ErrDeviceNotFound
