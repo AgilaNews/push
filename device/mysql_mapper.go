@@ -27,7 +27,7 @@ func (dm *MysqlDeviceMapper) AddNewDevice(device *Device) error {
 }
 
 func (dm *MysqlDeviceMapper) RemoveDevice(device *Device) error {
-	if len(device.ID) == 0 {
+	if device.ID == 0 {
 		return fmt.Errorf("please set device ID")
 	}
 

@@ -11,15 +11,15 @@ var (
 )
 
 type Device struct {
-	ID            string `gorm:"column:id;primary_key;" json:"-"`
-	Token         string `gorm:"column:token;type:varchar(1024);index;not null;" json:"token"`
+	ID            uint64 `gorm:"column:id;primary_key;" json:"-"`
+	Token         string `gorm:"column:token;type:varchar(512);index;not null;" json:"token"`
 	UserId        string `gorm:"column:user_id;type:varchar(64);index;default:'';" json:"user_id"`
 	DeviceId      string `gorm:"column:device_id;type:varchar(64);index;not null" json:"device_id"`
 	ClientVersion string `gorm:"column:client_version;type:varchar(32);index;" json:"client_version"`
 	Imsi          string `gorm:"column:imsi;type:varchar(64);" json:"imsi"`
 	Os            string `gorm:"column:os;type:varchar(32);index;" json:"os"`
 	OsVersion     string `gorm:"column:os_version;type:varchar(32);" json:"os_version"`
-	Vendor        string `gorm:"vendor:vendor;type:varchar(32); "json:"vendor"`
+	Vendor        string `gorm:"column:vendor;type:varchar(32); "json:"vendor"`
 
 	Slice int `gorm:"-"`
 }
