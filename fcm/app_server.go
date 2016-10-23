@@ -156,8 +156,8 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) erro
 		DelayWhileIdle:           &true_addr,
 		TimeToLive:               &default_ttl,
 		DeliveryReceiptRequested: &true_addr,
-		CollapseKey:              "notify",
-		ContentAvailable:         &true_addr,
+		//		CollapseKey:              "notify",
+		ContentAvailable: &true_addr,
 		Data: gcm.Data{
 			"type":    NEW_COMMENT_TYPE,
 			"user_id": dev.UserId,
