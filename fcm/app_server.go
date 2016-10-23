@@ -30,6 +30,8 @@ const (
 
 	UPSTREAM_REGISTER   = "1"
 	UPSTREAM_UNREGISTER = "2"
+
+	BROADCAST_TOPIC = "notification"
 )
 
 var (
@@ -166,6 +168,26 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) erro
 
 	log4go.Global.Info("[NOTIFY][%v][%v][%s]", dev.DeviceId, dev.UserId, dev.Token)
 
+	go appServer.client.Send(*msg)
+	return nil
+}
+
+func (appServer *AppServer) BroadcastReset() error {
+	msg := &gcm.XmppMessage{
+		To:                       fmt.Sprintf("/topics/%s", BROADCAST_TOPIC),
+		MessageId:                genMessageId(),
+		Priority:                 HIGH_PRIORITY,
+		DelayWhileIdle:           &true_addr,
+		TimeToLive:               &default_ttl,
+		DeliveryReceiptRequested: &false_addr,
+		ContentAvailable:         &true_addr,
+
+		Data: gcm.Data{
+			"type": REREGISTER_TYPE,
+		},
+	}
+
+	log4go.Global.Info("[RESET_ALL]")
 	go appServer.client.Send(*msg)
 	return nil
 }

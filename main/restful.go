@@ -128,6 +128,13 @@ func NewRestfulHandler(Addr string) (*net.TCPListener, *restful.Container, error
 		Returns(409, "invalid task status", nil),
 	)
 
+	ws.Route(ws.PUT("/reset").To(resetAll).
+		Consumes().
+		Doc("reset all tokens").
+		Writes(JsonResponse{}).
+		Returns(500, "internal error", nil),
+	)
+
 	restful.Add(ws)
 
 	cors := restful.CrossOriginResourceSharing{
@@ -416,4 +423,9 @@ func getDevice(request *restful.Request, response *restful.Response) {
 	} else {
 		WriteJsonSuccess(response, d)
 	}
+}
+
+func resetAll(request *restful.Request, response *restful.Response) {
+	fcm.GlobalAppServer.BroadcastReset()
+	WriteJsonSuccess(response, nil)
 }
