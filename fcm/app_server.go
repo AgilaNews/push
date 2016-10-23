@@ -170,16 +170,6 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) erro
 	return nil
 }
 
-func (appServer *AppServer) BroadcastNotifications(topics []string, notification *Notification) error {
-	var msg *gcm.XmppMessage
-
-	msg = getXmppMessageFromNotificationForIos(notification)
-	msg.To = strings.Join(topics, "||")
-
-	go appServer.client.Send(*msg)
-	return nil
-}
-
 func (appServer *AppServer) BroadcastNotification(topic string, notification *Notification) error {
 	var msg *gcm.XmppMessage
 

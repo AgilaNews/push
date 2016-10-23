@@ -215,8 +215,13 @@ func (pushManager *PushManager) DoTask(push_id_str string, context interface{}) 
 		if android_topics, ios_topics, err := pushManager.getTopics(push.Condition); err != nil {
 			log4go.Warn("get topic error :%v", err)
 		} else {
-			GlobalAppServer.BroadcastNotifications(ios_topics, notification)
-			GlobalAppServer.BroadcastNotifications(android_topics, notification)
+			for _, topic := range ios_topics {
+				GlobalAppServer.BroadcastNotification(topic, notification)
+			}
+
+			for _, topic := range android_topics {
+				GlobalAppServer.BroadcastNotification(topic, notification)
+			}
 		}
 	case PUSH_MULTICAST:
 		notification.PushId = 1
