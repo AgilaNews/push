@@ -272,7 +272,7 @@ func (appServer *AppServer) onMessageReceived(msg *gcm.CcsMessage) {
 		}
 
 		if d, err := device.GlobalDeviceMapper.GetDeviceById(device_id); err != nil {
-			log4go.Global.Warn("get device error: %v", err)
+			//			log4go.Global.Warn("get device error: %v", err)
 			return
 		} else {
 			if d != nil && d.Token != token {
