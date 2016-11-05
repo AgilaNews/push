@@ -384,7 +384,7 @@ func (p *PushManager) GetPush(id int) (*PushModel, error) {
 func (p *PushManager) GetPushesByNewsId(news_id string) ([]*PushModel, error) {
 	var pushModels []*PushModel
 
-	if ret := p.rdb.Where("news_id=?").Find(pushModels); ret.Error != nil {
+	if ret := p.rdb.Where("news_id=?").Find(&pushModels); ret.Error != nil {
 		return nil, ret.Error
 	} else {
 		if err := p.getTaskStatusOfPushes(pushModels); err != nil {
