@@ -286,6 +286,11 @@ func updatePush(request *restful.Request, response *restful.Response) {
 		return
 	}
 
+	if err := validateForm(form); err != nil {
+		WriteJsonError(response, 400, ERR_PARAM, fmt.Sprintf("validate your input error: %v", err))
+		return
+	}
+
 	notification := &fcm.Notification{
 		Tpl:     form.Tpl,
 		NewsId:  form.NewsId,
@@ -370,6 +375,11 @@ func newPush(request *restful.Request, response *restful.Response) {
 		return
 	}
 
+	if err := validateForm(form); err != nil {
+		WriteJsonError(response, 400, ERR_PARAM, fmt.Sprintf("validate input error"))
+		return
+	}
+
 	notification := &fcm.Notification{
 		Tpl:     form.Tpl,
 		NewsId:  form.NewsId,
@@ -409,6 +419,26 @@ func newPush(request *restful.Request, response *restful.Response) {
 			WriteJsonSuccess(response, model)
 		}
 	}
+}
+
+func validateForm(f *PushForm) error {
+	if f.Tpl != "2" {
+		return fmt.Errorf("we only support tpl 2")
+	}
+
+	if len(f.NewsId) != 12 {
+		return fmt.Errorf("you may set wrong newsid")
+	}
+
+	if len(f.Title) < 10 {
+		return fmt.Errorf("title too short?")
+	}
+
+	if len(f.Digest) == 0 {
+		return fmt.Errorf("digest error")
+	}
+
+	return nil
 }
 
 func getDevice(request *restful.Request, response *restful.Response) {
