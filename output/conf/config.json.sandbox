@@ -13,7 +13,8 @@
     },
     "http_server": {
         "addr": "10.8.6.7:8070",
-        "swagger_path": "/home/work/swagger-ui/dist"
+        "swagger_path": "/home/work/swagger-ui/dist",
+        "allow_domains": ["cmsweb.agilanews.info"]
     },
     "rpc_server": {
         "addr": ":6098"
