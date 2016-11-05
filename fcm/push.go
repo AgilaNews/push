@@ -381,6 +381,20 @@ func (p *PushManager) GetPush(id int) (*PushModel, error) {
 	}
 }
 
+func (p *PushManager) GetPushByNewsId(news_id string) (*PushModel, error) {
+	pushModel := &PushModel{}
+
+	if ret := p.rdb.First(pushModel, news_id); ret.Error != nil {
+		if ret.RecordNotFound() {
+			return nil, nil
+		}
+
+		return nil, ret.Error
+	} else {
+		return pushModel, nil
+	}
+}
+
 func (p *PushManager) BatchGetPush(ids []string) ([]*PushModel, error) {
 	models := make([]*PushModel, 0)
 	if err := p.rdb.Find(&models, ids).Error; err != nil {
