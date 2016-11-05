@@ -438,8 +438,12 @@ func validateForm(f *PushForm) error {
 		return fmt.Errorf("digest error")
 	}
 
-	if push, err := fcm.GlobalPushManager.GetPushByNewsId(f.NewsId); push == nil && err == nil {
-		return fmt.Errorf("create duplicated news")
+	if pushes, err := fcm.GlobalPushManager.GetPushesByNewsId(f.NewsId); err == nil {
+		for _, push := range pushes {
+			if push.Status == task.STATUS_PENDING || push.Status == task.STATUS_EXEC || push.Status == task.STATUS_SUCC {
+				return fmt.Errorf("create duplicated news")
+			}
+		}
 	}
 
 	return nil

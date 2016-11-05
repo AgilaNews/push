@@ -381,17 +381,17 @@ func (p *PushManager) GetPush(id int) (*PushModel, error) {
 	}
 }
 
-func (p *PushManager) GetPushByNewsId(news_id string) (*PushModel, error) {
-	pushModel := &PushModel{}
+func (p *PushManager) GetPushesByNewsId(news_id string) ([]*PushModel, error) {
+	var pushModels []*PushModel
 
-	if ret := p.rdb.First(pushModel, news_id); ret.Error != nil {
-		if ret.RecordNotFound() {
-			return nil, nil
-		}
-
+	if ret := p.rdb.Where("news_id=?").Find(pushModels); ret.Error != nil {
 		return nil, ret.Error
 	} else {
-		return pushModel, nil
+		if err := p.getTaskStatusOfPushes(pushModels); err != nil {
+			return nil, err
+		}
+
+		return pushModels, nil
 	}
 }
 
