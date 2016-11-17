@@ -40,9 +40,15 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 func (s *CommentCallbackService) OnLiked(ctx context.Context, req *pb.OnLikedCallbackRequest) (*pb.EmptyMessage, error) {
 	resp := &pb.EmptyMessage{}
 
+	if req.Comment == nil{
+		log4go.Info("recieve null comment")
+		return resp, fmt.Errorf("null comment") 
+	}
+
 	if req.Comment.Liked <= 0 {
 		return resp, fmt.Errorf("0 like comment") 
 	}
+
 	log4go.Info("on received comment like event: commentId:%v likenum:%d ", req.Comment.CommentId, req.Comment.Liked)
 
 	if devices, err := device.GlobalDeviceMapper.GetDeviceByUserId(req.Comment.UserId); err != nil {
