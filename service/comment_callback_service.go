@@ -22,7 +22,6 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 
 	if req.Comment.RefComment == nil {
 		return nil, fmt.Errorf("unfind ref comment")
-		return resp, nil
 	}
 	log4go.Info("on received comment reply event: user:%v", req.Comment.RefComment)
 
@@ -35,27 +34,19 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 			fcm.GlobalAppServer.PushNewCommentAlertToDevice(d, fcm.NEW_COMMENT_TYPE)
 		}
 	}
-
-	resp.Code = pb.GeneralResponse_NO_ERROR
-	resp.ErrorMsg = "ok"
 	return resp, nil
 }
 
-func (s *CommentCallbackService) OnLike(ctx context.Context, req *pb.OnLikedCallbackRequest) (*pb.GeneralResponse, error) {
-	resp := &pb.GeneralResponse{}
+func (s *CommentCallbackService) OnLiked(ctx context.Context, req *pb.OnLikedCallbackRequest) (*pb.EmptyMessage, error) {
+	resp := &pb.EmptyMessage{}
 
 	if req.Comment.Liked <= 0 {
-		resp.Code = pb.GeneralResponse_REQ_PARAM_ERROR
-		resp.ErrorMsg = fmt.Sprintf("0 like comment")
-		log4go.Warn("0 like comment")
-		return resp, nil
+		return resp, fmt.Errorf("0 like comment") 
 	}
-	log4go.Info("on received comment like event: commentId:%v likenum:%d ", req.Comment.ID, req.Comment.Liked)
+	log4go.Info("on received comment like event: commentId:%v likenum:%d ", req.Comment.CommentId, req.Comment.Liked)
 
 	if devices, err := device.GlobalDeviceMapper.GetDeviceByUserId(req.Comment.UserId); err != nil {
-		resp.Code = pb.GeneralResponse_INTERNAL_ERROR
-		resp.ErrorMsg = fmt.Sprintf("get device of %v error", req.Comment.UserId)
-		return resp, nil
+		return resp, fmt.Errorf("get device of %s error", req.Comment.UserId)
 	} else {
 		log4go.Info("pushed notifications to %d device", len(devices))
 		for _, d := range devices {
@@ -67,8 +58,3 @@ func (s *CommentCallbackService) OnLike(ctx context.Context, req *pb.OnLikedCall
 	return resp, nil
 }
 
-func (s *CommentCallbackService) OnLiked(ctx context.Context, req *pb.OnLikedCallbackRequest) (*pb.EmptyMessage, error) {
-	resp := &pb.EmptyMessage{}
-
-	return resp, nil
-}
