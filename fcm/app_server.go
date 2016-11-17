@@ -22,6 +22,7 @@ const (
 	CONFIRM_TYPE      = "2"
 	REREGISTER_TYPE   = "3"
 	NEW_COMMENT_TYPE  = "4"
+	NEW_LIKE_TYPE = "5"
 
 	TPL_IMAGE_WITH_TEXT = "2"
 
@@ -150,7 +151,7 @@ func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notific
 	return nil
 }
 
-func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) error {
+func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device, alertType string) error {
 	msg := &gcm.XmppMessage{
 		To:                       dev.Token,
 		MessageId:                genMessageId(),
@@ -161,7 +162,7 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device) erro
 		//		CollapseKey:              "notify",
 		ContentAvailable: &true_addr,
 		Data: gcm.Data{
-			"type":    NEW_COMMENT_TYPE,
+			"type":    alertType,
 			"user_id": dev.UserId,
 		},
 	}
