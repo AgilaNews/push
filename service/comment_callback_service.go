@@ -60,7 +60,6 @@ func (s *CommentCallbackService) OnLiked(ctx context.Context, req *pb.OnLikedCal
 	if devices, err := device.GlobalDeviceMapper.GetDeviceByUserId(req.Comment.UserId); err != nil {
 		return resp, fmt.Errorf("get device of %s error", req.Comment.UserId)
 	} else {
-		log4go.Info("pushed notifications to %d device", len(devices))
 		for _, d := range devices {
 			if d.Os == "ios" ||  version.Compare(version.Normalize(d.ClientVersion), minAndroidVer, ">="){
 				log4go.Info("push alert to [%s]", d.DeviceId)
