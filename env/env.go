@@ -132,7 +132,9 @@ func Init() error {
 	if Config.Log.Console {
 		log4go.Global.AddFilter("stdout", level, log4go.NewConsoleLogWriter())
 	}
-	log4go.Global.AddFilter("log", level, log4go.NewFileLogWriter(Config.Log.Path, false))
+	fl := log4go.NewFileLogWriter(Config.Log.Path, false)
+	fl.SetFormat("[%D %t][%L] %M")
+	log4go.Global.AddFilter("log", level, fl)
 
 	// init device mapper
 	// use full when you want to push to certain device
