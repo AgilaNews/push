@@ -24,6 +24,9 @@ const (
 	NEW_COMMENT_TYPE  = "4"
 	NEW_LIKE_TYPE = "5"
 
+	MIN_NEW_COMMENT_VER = "v1.2.4"
+	MIN_LIKE_COMMENT_VER = "v1.2.5"
+
 	TPL_IMAGE_WITH_TEXT = "2"
 
 	REGISTER_SUCCESS = "0"
@@ -151,7 +154,7 @@ func (appServer *AppServer) PushNotificationToDevice(dev *device.Device, notific
 	return nil
 }
 
-func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device, alertType string) error {
+func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device, alertType string, version string) error {
 	msg := &gcm.XmppMessage{
 		To:                       dev.Token,
 		MessageId:                genMessageId(),
@@ -164,10 +167,11 @@ func (appServer *AppServer) PushNewCommentAlertToDevice(dev *device.Device, aler
 		Data: gcm.Data{
 			"type":    alertType,
 			"user_id": dev.UserId,
+			"min_version":version,
 		},
 	}
 
-	log4go.Global.Info("[NOTIFY][%v][%v][%s]", dev.DeviceId, dev.UserId, dev.Token)
+	log4go.Global.Info("[NOTIFY][%v][%v][%s][%s]", dev.DeviceId, dev.UserId, dev.Token, version)
 
 	go appServer.client.Send(*msg)
 	return nil

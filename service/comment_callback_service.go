@@ -7,7 +7,6 @@ import (
 	"github.com/AgilaNews/push/device"
 	"github.com/AgilaNews/push/fcm"
 	"github.com/alecthomas/log4go"
-	"github.com/mcuadros/go-version"
 	"golang.org/x/net/context"
 )
 
@@ -36,7 +35,7 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 		log4go.Info("pushed notifications to %d device", len(devices))
 		for _, d := range devices {
 			log4go.Info("push alert to [%s]", d.DeviceId)
-			fcm.GlobalAppServer.PushNewCommentAlertToDevice(d, fcm.NEW_COMMENT_TYPE)
+			fcm.GlobalAppServer.PushNewCommentAlertToDevice(d, fcm.NEW_COMMENT_TYPE, fcm.MIN_NEW_COMMENT_VER)
 		}
 	}
 	return resp, nil
@@ -44,7 +43,6 @@ func (s *CommentCallbackService) OnReply(ctx context.Context, req *pb.OnReplyCal
 
 func (s *CommentCallbackService) OnLiked(ctx context.Context, req *pb.OnLikedCallbackRequest) (*pb.EmptyMessage, error) {
 	resp := &pb.EmptyMessage{}
-	minAndroidVer := version.Normalize("1.2.5")
 
 	if req.Comment == nil{
 		log4go.Info("recieve null comment")
@@ -61,10 +59,8 @@ func (s *CommentCallbackService) OnLiked(ctx context.Context, req *pb.OnLikedCal
 		return resp, fmt.Errorf("get device of %s error", req.Comment.UserId)
 	} else {
 		for _, d := range devices {
-			if d.Os == "ios" ||  version.Compare(version.Normalize(d.ClientVersion), minAndroidVer, ">="){
-				log4go.Info("push alert to [%s]", d.DeviceId)
-				fcm.GlobalAppServer.PushNewCommentAlertToDevice(d, fcm.NEW_COMMENT_TYPE)
-			}
+			log4go.Info("push alert to [%s]", d.DeviceId)
+			fcm.GlobalAppServer.PushNewCommentAlertToDevice(d, fcm.NEW_LIKE_TYPE, fcm.MIN_LIKE_COMMENT_VER)
 		}
 	}
 
