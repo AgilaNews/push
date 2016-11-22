@@ -379,7 +379,7 @@ func newPush(request *restful.Request, response *restful.Response) {
 	}
 
 	if err := validateForm(form); err != nil {
-		WriteJsonError(response, 400, ERR_PARAM, fmt.Sprintf("validate input error"))
+		WriteJsonError(response, 400, ERR_PARAM, fmt.Sprintf("validate input error: %v", err))
 		return
 	}
 
