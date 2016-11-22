@@ -24,6 +24,9 @@ const (
 	ERR_PARAM      = 40001
 	ERR_NON_EXISTS = 40401
 	ERR_INTERNAL   = 50001
+
+    NORMAL_NEWS_TPL = "2"
+    VIDEO_NEWS_TPL = "3"
 )
 
 type JsonResponse struct {
@@ -422,8 +425,8 @@ func newPush(request *restful.Request, response *restful.Response) {
 }
 
 func validateForm(f *PushForm) error {
-	if f.Tpl != "2" {
-		return fmt.Errorf("we only support tpl 2")
+	if f.Tpl != NORMAL_NEWS_TPL || f.Tpl != VIDEO_NEWS_TPL{
+		return fmt.Errorf("we only support tpl 2,3")
 	}
 
 	if len(f.NewsId) != 12 {
