@@ -425,7 +425,7 @@ func newPush(request *restful.Request, response *restful.Response) {
 }
 
 func validateForm(f *PushForm) error {
-	if f.Tpl != NORMAL_NEWS_TPL || f.Tpl != VIDEO_NEWS_TPL{
+	if f.Tpl != NORMAL_NEWS_TPL && f.Tpl != VIDEO_NEWS_TPL{
 		return fmt.Errorf("we only support tpl 2,3")
 	}
 
