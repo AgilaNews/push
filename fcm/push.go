@@ -502,7 +502,7 @@ func (p *PushManager) getTopics(condition *PushCondition) ([]string, []string, e
 		}
 	}
 
-	log4go.Info("ios_min_version:%s target_versions[%v]  android_min_version:%s, target_versions[%s]", iosMinV, minV, ios_topics, android_topics)
+	log4go.Info("ios_min_version:%s target_versions:%v  android_min_version:%s, target_versions[%s]", iosMinV, ios_topics, minV, android_topics)
 
 	return android_topics, ios_topics, nil
 }
