@@ -39,10 +39,11 @@ type ClientVersion struct {
 }
 
 type PushCondition struct {
-	Devices    []string `json:"devices"`
-	MinVersion string   `json:"min_version"`
-	OS         string   `json:"os"`
-	Platform   string   `json:"platform"`
+	Devices       []string `json:"devices"`
+	MinVersion    string   `json:"min_version"`
+	IosMinVersion string   `json:"ios_min_version"`
+	OS            string   `json:"os"`
+	Platform      string   `json:"platform"`
 	//	LocalTimeZone string   `json:"local_time_zone"`
 }
 
@@ -473,7 +474,7 @@ func (p *PushManager) getTopics(condition *PushCondition) ([]string, []string, e
 	}
 
 	var android_topics, ios_topics []string
-	var minV string
+	var minV, iosMinV string
 
 	if nil == condition || len(condition.MinVersion) == 0 {
 		minV = version.Normalize(PUSH_MIN_VERSION)
@@ -481,14 +482,20 @@ func (p *PushManager) getTopics(condition *PushCondition) ([]string, []string, e
 		minV = condition.MinVersion
 	}
 
-	for _, versionModel := range versions {
-		if version.Compare(versionModel.Version, minV, ">=") {
-			if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_IOS) && (versionModel.Status&IOS_PUBLISHED != 0) {
-				log4go.Debug("version %v, status %v, added to ios", versionModel.Version, versionModel.Status)
-				ios_topics = append(ios_topics, fmt.Sprintf("ios_v%s", versionModel.Version))
-			}
+	if nil == condition || len(condition.IosMinVersion) == 0 {
+		iosMinV = version.Normalize(PUSH_MIN_VERSION)
+	} else {
+		iosMinV = condition.IosMinVersion
+	}
 
-			if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_ANDROID) && (versionModel.Status&ANDROID_PUBLISHED != 0) {
+	for _, versionModel := range versions {
+		if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_IOS) && (versionModel.Status&IOS_PUBLISHED != 0) && version.Compare(versionModel.Version, iosMinV, ">=") {
+			log4go.Debug("version %v, status %v, added to ios", versionModel.Version, versionModel.Status)
+			ios_topics = append(ios_topics, fmt.Sprintf("ios_v%s", versionModel.Version))
+		}
+
+		if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_ANDROID) && (versionModel.Status&ANDROID_PUBLISHED != 0) && version.Compare(versionModel.Version, minV, ">=") {
+			{
 				log4go.Debug("version %v, status %v, added to android", versionModel.Version, versionModel.Status)
 				android_topics = append(android_topics, fmt.Sprintf("android_v%s", versionModel.Version))
 			}
