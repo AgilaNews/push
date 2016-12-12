@@ -489,6 +489,11 @@ func (p *PushManager) getTopics(condition *PushCondition) ([]string, []string, e
 	}
 
 	for _, versionModel := range versions {
+		// TODO remove later
+		if versionModel.Version == "1.2.2" && (condition.Platform == PLATFORM_IOS || condition.Platform == PLATFORM_ALL) {
+			continue
+		}
+
 		if (condition.Platform == PLATFORM_ALL || condition.Platform == PLATFORM_IOS) && (versionModel.Status&IOS_PUBLISHED != 0) && version.Compare(versionModel.Version, iosMinV, ">=") {
 			log4go.Debug("version %v, status %v, added to ios", versionModel.Version, versionModel.Status)
 			ios_topics = append(ios_topics, fmt.Sprintf("ios_v%s", versionModel.Version))
