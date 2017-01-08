@@ -27,8 +27,8 @@ const (
 
     NORMAL_NEWS_TPL = "2"
     VIDEO_NEWS_TPL = "3"
-    GIF_NEWS_TPL = "3"
-    PHOTO_NEWS_TPL = "3"
+    GIF_NEWS_TPL = "4"
+    PHOTO_NEWS_TPL = "5"
 )
 
 type JsonResponse struct {
