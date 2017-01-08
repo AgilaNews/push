@@ -27,6 +27,8 @@ const (
 
     NORMAL_NEWS_TPL = "2"
     VIDEO_NEWS_TPL = "3"
+    GIF_NEWS_TPL = "3"
+    PHOTO_NEWS_TPL = "3"
 )
 
 type JsonResponse struct {
@@ -425,7 +427,7 @@ func newPush(request *restful.Request, response *restful.Response) {
 }
 
 func validateForm(f *PushForm) error {
-	if f.Tpl != NORMAL_NEWS_TPL && f.Tpl != VIDEO_NEWS_TPL{
+	if f.Tpl != NORMAL_NEWS_TPL && f.Tpl != VIDEO_NEWS_TPL && f.Tpl != GIF_NEWS_TPL && f.Tpl != PHOTO_NEWS_TPL {
 		return fmt.Errorf("we only support tpl 2,3")
 	}
 
