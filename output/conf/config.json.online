@@ -14,7 +14,7 @@
     "http_server": {
         "addr": ":8070",
         "swagger_path": "/home/work/swagger-ui/dist",
-        "allow_domains": ["cmsweb.agilanews.today"]
+        "allow_domains": ["cmsweb.agilanews.today", "cmsweb2.agilanews.today"]
     },
     "rpc_server": {
         "addr": ":6098"
